@@ -1,50 +1,38 @@
 <!DOCTYPE html>
 <html>
-  <head>
-    <meta charset="utf-8" />
-    <title>Web to Phone Call Test</title>
-    <script src="https://media.twiliocdn.com/sdk/js/voice/v2/twilio.min.js"></script>
-  </head>
-  <body>
-    <h1>📞 Web to Phone Test</h1>
+<head>
+  <title>Twilio Voice Test</title>
+</head>
+<body>
+  <h2>Twilio Voice Test</h2>
+  <div id="status">Status: Fetching token...</div>
 
-    <input id="phoneNumber" type="text" placeholder="+1234567890" />
-    <button id="callButton">Call</button>
-    <button id="hangupButton" disabled>Hang Up</button>
+  <input type="text" id="phoneNumber" placeholder="Enter phone number e.g. +14155552671">
+  <button id="callButton" disabled>Call</button>
+  <button id="hangupButton" disabled>Hang Up</button>
 
-    <script>
-      let device;
-      let connection;
+  <!-- Latest Twilio JS SDK -->
+  <script src="https://media.twiliocdn.com/sdk/js/voice/latest/twilio-voice.min.js"></script>
 
-      async function initDevice() {
-        const response = await fetch("/token?identity=webUser");
-        const data = await response.json();
+  <script>
+    let device;
+    let connection;
 
-        device = new Twilio.Device(data.token);
+    async function initDevice() {
+  console.log("Fetching token...");
+  const response = await fetch("https://journalary-pamela-soundlessly.ngrok-free.dev/token?identity=webUser");
+  const data = await response.json();
+  console.log("Token fetched:", data);
 
-        device.on("ready", () => console.log("Twilio.Device Ready"));
-        device.on("error", err => console.error("Device error:", err));
-        device.on("disconnect", () => {
-          console.log("Call ended");
-          document.getElementById("hangupButton").disabled = true;
-          document.getElementById("callButton").disabled = false;
-        });
-      }
+  device = new Twilio.Device(data.token, { debug: true });
 
-      document.getElementById("callButton").onclick = () => {
-        const phoneNumber = document.getElementById("phoneNumber").value;
-        if (!phoneNumber) return alert("Enter a phone number (e.g. +14155552671)");
-
-        connection = device.connect({ To: phoneNumber });
-        document.getElementById("callButton").disabled = true;
-        document.getElementById("hangupButton").disabled = false;
-      };
-
-      document.getElementById("hangupButton").onclick = () => {
-        if (connection) connection.disconnect();
-      };
-
-      initDevice();
-    </script>
-  </body>
+  device.on("ready", () => console.log("✅ Device Ready"));
+  device.on("error", err => console.error("❌ Device Error:", err));
+  device.on("connect", () => console.log("📞 Call connected"));
+  device.on("disconnect", () => console.log("☎️ Call ended"));
+  device.on("incoming", () => console.log("📲 Incoming call"));
+}
+initDevice();
+  </script>
+</body>
 </html>
