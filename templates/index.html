@@ -4,49 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Web Calling Application</title>
-    <!-- Twilio Voice SDK 2.16.0 (local, with cache-busting) -->
-    <script type="text/javascript" src="/static/twilio-voice.min.js?cache_bust=202511120320" onerror="console.error('Failed to fetch local Twilio SDK:', event); loadTwilioFallback();"></script>
-    <script>
-        // Fallback to Twilio 1.x CDN if local fails
-        function loadTwilioFallback() {
-            console.log('Local Twilio SDK failed, trying CDN fallback...');
-            const script = document.createElement('script');
-            script.type = 'text/javascript';
-            script.src = 'https://media.twiliocdn.com/sdk/js/client/releases/1.13.0/twilio.min.js';
-            script.onload = () => console.log('Twilio 1.13.0 CDN loaded successfully');
-            script.onerror = () => console.error('Twilio 1.13.0 CDN failed to load');
-            document.head.appendChild(script);
-        }
-
-        try {
-            console.log('Checking Twilio SDK load...');
-            if (typeof Twilio === 'undefined' || typeof Twilio.Voice === 'undefined' || typeof Twilio.Voice.Device === 'undefined') {
-                console.error('Twilio Voice SDK 2.16.0 not defined after load');
-            } else {
-                console.log('Twilio Voice SDK 2.16.0 loaded successfully:', Twilio);
-                console.log('Twilio.Voice:', Twilio.Voice);
-                console.log('Twilio.Voice.Device:', Twilio.Voice.Device);
-            }
-        } catch (e) {
-            console.error('Twilio SDK execution error:', e);
-        }
-
-        // Log fetch details
-        fetch('/static/twilio-voice.min.js?cache_bust=202511120320')
-            .then(response => {
-                console.log('Twilio SDK fetch headers:', {
-                    status: response.status,
-                    contentType: response.headers.get('Content-Type'),
-                    csp: response.headers.get('Content-Security-Policy')
-                });
-                return response.text();
-            })
-            .then(text => {
-                console.log('Twilio SDK first 100 chars:', text.substring(0, 100));
-            })
-            .catch(err => console.error('Twilio SDK fetch failed:', err));
-    </script>
-
     <style>
         * {
             margin: 0;
@@ -388,12 +345,50 @@
         </div>
     </div>
 
+    <!-- Load Twilio SDK directly -->
+    <script src="https://unpkg.com/@twilio/voice-sdk@2.11.0/dist/twilio.min.js" 
+            crossorigin="anonymous"
+            onerror="handleSDKLoadError()"></script>
+    
     <script>
+        let sdkLoadFailed = false;
+        
+        function handleSDKLoadError() {
+            console.error('❌ Failed to load Twilio SDK');
+            sdkLoadFailed = true;
+            document.getElementById('status').textContent = 'Twilio SDK failed to load. Browser calling unavailable. Use Direct or Bridge Call instead.';
+            document.getElementById('status').className = 'status error';
+            document.getElementById('status').style.display = 'block';
+        }
+        
+        // Wait for DOM and SDK to load
+        window.addEventListener('load', function() {
+            console.log('Page loaded, checking for Twilio SDK...');
+            if (typeof Twilio !== 'undefined' && typeof Twilio.Device !== 'undefined') {
+                console.log('✅ Twilio SDK loaded successfully');
+                initializeApp();
+            } else if (!sdkLoadFailed) {
+                console.log('⏳ Waiting for Twilio SDK...');
+                // Try again after a delay
+                setTimeout(function() {
+                    if (typeof Twilio !== 'undefined' && typeof Twilio.Device !== 'undefined') {
+                        console.log('✅ Twilio SDK loaded successfully (delayed)');
+                        initializeApp();
+                    } else {
+                        console.error('❌ Twilio SDK still not available after delay');
+                        handleSDKLoadError();
+                    }
+                }, 2000);
+            }
+        });
+        
+        function initializeApp() {
+            console.log('✅ Initializing application...');
+            
         let twilioDevice = null;
         let currentConnection = null;
         let callHistory = JSON.parse(localStorage.getItem('callHistory') || '[]');
         let currentTab = 'browser';
-        let isTwilioV1 = false; // Track if using 1.x SDK
 
         // Tab switching
         document.querySelectorAll('.tab').forEach(tab => {
@@ -414,114 +409,72 @@
             hideStatus();
         }
 
-        // Initialize Twilio Device (handles 2.x and 1.x APIs)
+        // Initialize Twilio Device for browser calling
         async function initializeTwilioDevice() {
             try {
                 // Check if Twilio library is loaded
-                if (isTwilioV1) {
-                    if (typeof Twilio === 'undefined' || typeof Twilio.Device === 'undefined') {
-                        console.error('❌ Twilio Voice SDK 1.13.0 not loaded');
-                        showStatus('Twilio SDK not loaded. Please refresh the page.', 'error');
-                        return false;
-                    }
-                } else {
-                    if (typeof Twilio === 'undefined' || typeof Twilio.Voice === 'undefined' || typeof Twilio.Voice.Device === 'undefined') {
-                        console.error('❌ Twilio Voice SDK 2.16.0 not loaded - check /static/twilio-voice.min.js');
-                        showStatus('Twilio SDK not loaded. Please refresh the page.', 'error');
-                        return false;
-                    }
+                if (typeof Twilio === 'undefined' || typeof Twilio.Device === 'undefined') {
+                    console.error('❌ Twilio SDK not loaded');
+                    return false;
                 }
                 
-                console.log(`✅ Twilio Voice SDK ${isTwilioV1 ? '1.13.0' : '2.16.0'} loaded`);
+                console.log('✅ Twilio SDK 2.x loaded');
                 console.log('Fetching token...');
-                
-                const response = await fetch('/token?identity=web_user');
+                const response = await fetch('/token');
                 const data = await response.json();
                 
                 console.log('Token response:', data);
                 
                 if (data.error) {
                     console.error('Token error:', data.error);
-                    showStatus(`Token error: ${data.error}`, 'error');
                     return false;
                 }
                 
                 if (!data.token) {
                     console.error('No token in response');
-                    showStatus('No token received from server', 'error');
                     return false;
                 }
                 
-                console.log('Initializing Twilio Device...');
-                if (isTwilioV1) {
-                    twilioDevice = new Twilio.Device(data.token, {
-                        codecPreferences: ['opus', 'pcmu'],
-                        debug: true
-                    });
-                } else {
-                    twilioDevice = new Twilio.Voice.Device(data.token, {
-                        codecPreferences: ['opus', 'pcmu'],
-                        sounds: {
-                            incoming: true,
-                            outgoing: true,
-                            disconnect: true
-                        },
-                        debug: true
-                    });
-                }
+                console.log('Initializing Twilio Device 2.x...');
+                
+                // Twilio Device 2.x initialization - simplified options
+                twilioDevice = new Twilio.Device(data.token, {
+                    logLevel: 1, // 1=debug
+                    codecPreferences: ['opus', 'pcmu'], // Use string values instead of enum
+                    edge: 'ashburn' // Optional: specify edge location
+                });
 
-                twilioDevice.on('ready', (device) => {
-                    console.log('✅ Twilio Device Ready!', device);
-                    showStatus('Browser calling ready!', 'success');
+                // Register event handlers for Device 2.x
+                twilioDevice.on('registered', () => {
+                    console.log('✅ Twilio Device Registered and Ready!');
                 });
 
                 twilioDevice.on('error', (error) => {
                     console.error('❌ Twilio Device Error:', error);
-                    showStatus(`Device Error: ${error.message} (Code: ${error.code || 'N/A'})`, 'error');
+                    showStatus(`Device Error: ${error.message}`, 'error');
                 });
 
-                twilioDevice.on('connect', (conn) => {
-                    console.log('✅ Call connected', conn);
-                    currentConnection = conn;
-                    document.getElementById('audioStatus').classList.add('active');
-                    showStatus('Call connected! Speak into your microphone.', 'success');
+                twilioDevice.on('incoming', (call) => {
+                    console.log('Incoming call from:', call.parameters.From);
                 });
 
-                twilioDevice.on('disconnect', (conn) => {
-                    console.log('Call ended', conn);
-                    resetBrowserCallUI();
-                    showStatus('Call ended', 'info');
-                });
-
-                twilioDevice.on('incoming', (conn) => {
-                    console.log('Incoming call:', conn);
-                    showStatus('Incoming call...', 'info');
-                    conn.accept();
-                });
-
-                console.log('✅ Twilio Device initialization started');
+                // Register the device
+                await twilioDevice.register();
+                
+                console.log('✅ Twilio Device initialized and registered successfully');
                 return true;
             } catch (error) {
                 console.error('❌ Failed to initialize device:', error);
-                showStatus(`Initialization failed: ${error.message}`, 'error');
+                console.error('Error stack:', error.stack);
                 return false;
             }
         }
 
-        // Initialize on page load with retry mechanism
-        document.addEventListener('DOMContentLoaded', () => {
-            let retries = 3;
-            async function tryInitialize() {
-                const success = await initializeTwilioDevice();
-                if (!success && retries > 0) {
-                    retries--;
-                    console.log(`Retrying initialization (${retries} attempts left)...`);
-                    setTimeout(tryInitialize, 2000);
-                } else if (!success) {
-                    console.error('Failed to initialize Twilio Device after retries');
-                }
-            }
-            tryInitialize();
+        // Initialize on page load
+        window.addEventListener('DOMContentLoaded', () => {
+            console.log('Page loaded, initializing Twilio Device...');
+            initializeTwilioDevice();
+            displayCallHistory();
         });
 
         // Browser Call Button
@@ -538,13 +491,18 @@
                 return;
             }
 
+            console.log('Call button clicked, checking device...');
+            console.log('twilioDevice:', twilioDevice);
+
             if (!twilioDevice) {
-                showStatus('Initializing browser calling...', 'info');
+                console.log('Device not initialized, attempting to initialize...');
                 const initialized = await initializeTwilioDevice();
+                console.log('Initialization result:', initialized);
                 if (!initialized) {
-                    showStatus('Browser calling not available. Please refresh and try again.', 'error');
+                    showStatus('Browser calling failed to initialize. Check console for details.', 'error');
                     return;
                 }
+                // Wait a bit for device to be ready
                 await new Promise(resolve => setTimeout(resolve, 1000));
             }
 
@@ -552,18 +510,41 @@
             showStatus('Connecting call from browser...', 'info');
 
             try {
-                const params = { params: { To: phoneNumber } };
                 console.log('Attempting to connect call to:', phoneNumber);
-                currentConnection = twilioDevice.connect(params);
+                
+                // Twilio Device 2.x - connect returns a Call object
+                const call = await twilioDevice.connect({
+                    params: { To: phoneNumber }
+                });
+                
+                currentConnection = call;
+                
+                // Set up call event handlers
+                call.on('accept', () => {
+                    console.log('✅ Call accepted and connected');
+                    document.getElementById('audioStatus').classList.add('active');
+                    showStatus('Call connected! Speak into your microphone.', 'success');
+                });
+                
+                call.on('disconnect', () => {
+                    console.log('Call ended');
+                    resetBrowserCallUI();
+                    showStatus('Call ended', 'info');
+                });
+                
+                call.on('error', (error) => {
+                    console.error('Call error:', error);
+                    showStatus(`Call Error: ${error.message}`, 'error');
+                    resetBrowserCallUI();
+                });
                 
                 document.getElementById('browserCallBtn').style.display = 'none';
                 document.getElementById('browserHangupBtn').style.display = 'block';
                 
                 addToCallHistory(phoneNumber, 'Browser');
-                
             } catch (error) {
                 console.error('Call connection error:', error);
-                showStatus(`Call failed: ${error.message}`, 'error');
+                showStatus(`Error: ${error.message}`, 'error');
                 document.getElementById('browserCallBtn').disabled = false;
             }
         });
@@ -572,9 +553,6 @@
         document.getElementById('browserHangupBtn').addEventListener('click', () => {
             if (currentConnection) {
                 currentConnection.disconnect();
-            }
-            if (twilioDevice) {
-                twilioDevice.disconnectAll();
             }
             resetBrowserCallUI();
             showStatus('Call ended', 'info');
@@ -749,8 +727,15 @@
             `).join('');
         }
 
+        // Initialize on page load
+        window.addEventListener('DOMContentLoaded', () => {
+            console.log('Page loaded, initializing Twilio Device 2.x...');
+            initializeTwilioDevice();
+        });
+
         // Display call history on load
         displayCallHistory();
+        }
     </script>
 </body>
 </html>

@@ -3,15 +3,23 @@ from twilio.rest import Client
 from twilio.twiml.voice_response import VoiceResponse, Dial
 import os
 from dotenv import load_dotenv
-from flask_cors import CORS
-app = Flask(__name__)
-CORS(app, resources={r"/make-call": {"origins": "*"}, r"/token": {"origins": "*"}})
-
 
 # Load environment variables from .env file
 load_dotenv()
 
-#app = Flask(__name__)
+app = Flask(__name__)
+
+# Add Content Security Policy to allow Twilio SDK from multiple CDNs
+@app.after_request
+def set_csp(response):
+    response.headers['Content-Security-Policy'] = (
+        "script-src 'self' 'unsafe-inline' "
+        "https://media.twiliocdn.com https://sdk.twilio.com "
+        "https://unpkg.com https://cdn.jsdelivr.net; "
+        "connect-src 'self' https://eventgw.twilio.com https://chunderw-vpc-gll.twilio.com "
+        "wss://chunderw-vpc-gll.twilio.com https://*.twilio.com wss://*.twilio.com"
+    )
+    return response
 
 # Twilio credentials (set these as environment variables)
 TWILIO_ACCOUNT_SID = os.environ.get('TWILIO_ACCOUNT_SID')
@@ -30,12 +38,6 @@ client = Client(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
 @app.route('/')
 def index():
     return render_template('index.html')
-@app.after_request
-def set_csp(response):
-    # Update the policy to allow inline scripts
-    response.headers['Content-Security-Policy'] = "script-src 'self' 'unsafe-inline' https://media.twiliocdn.com https://sdk.twilio.com;"
-    # Consider adding other directives like `default-src` as needed for your app
-    return response
 
 @app.route('/make-call', methods=['POST'])
 def make_call():
@@ -152,14 +154,15 @@ def incoming_call():
     
     return str(response), 200, {'Content-Type': 'text/xml'}
 
-@app.route("/call-status", methods=["GET", "POST"])
+@app.route('/call-status', methods=['POST'])
 def call_status():
-    from flask import request
-
-    data = request.values.to_dict()
-    print("📞 Call Status Callback:", data)
-
-    return "OK", 200
+    """Receive call status updates"""
+    call_sid = request.form.get('CallSid')
+    call_status = request.form.get('CallStatus')
+    
+    print(f"Call {call_sid} status: {call_status}")
+    
+    return '', 200
 
 @app.route('/token', methods=['GET'])
 def token():
