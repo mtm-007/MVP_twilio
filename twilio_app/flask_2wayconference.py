@@ -61,9 +61,15 @@ def make_call():
                 }
             }), 500
         
+        # Use ngrok URL from environment or fallback to request URL
+        base_url = os.environ.get('NGROK_URL', request.url_root.rstrip('/'))
+        print(f"Using base URL: {base_url}")
+        
         if call_mode == 'bridge':
             # Bridge mode: Call your phone first, then connect to target
             your_phone = os.environ.get('YOUR_PHONE_NUMBER')
+            
+            print(f"Bridge mode - YOUR_PHONE_NUMBER from env: {your_phone}")
             
             if not your_phone:
                 return jsonify({
@@ -74,14 +80,18 @@ def make_call():
             # Store the target number for the voice endpoint to use
             app.config['CURRENT_TARGET'] = to_number
             
+            print(f"Creating bridge call - Calling your phone: {your_phone}, Target will be: {to_number}")
+            
             # Create a call to YOUR phone first
             call = client.calls.create(
                 to=your_phone,
                 from_=TWILIO_PHONE_NUMBER,
-                url=request.url_root + 'voice',
-                status_callback=request.url_root + 'call-status',
+                url=base_url + '/voice',
+                status_callback=base_url + '/call-status',
                 status_callback_event=['initiated', 'ringing', 'answered', 'completed']
             )
+            
+            print(f"Bridge call created - SID: {call.sid}")
             
             return jsonify({
                 'success': True,
@@ -93,8 +103,8 @@ def make_call():
             call = client.calls.create(
                 to=to_number,
                 from_=TWILIO_PHONE_NUMBER,
-                url=request.url_root + 'voice-direct',
-                status_callback=request.url_root + 'call-status',
+                url=base_url + '/voice-direct',
+                status_callback=base_url + '/call-status',
                 status_callback_event=['initiated', 'ringing', 'answered', 'completed']
             )
             
@@ -107,9 +117,13 @@ def make_call():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
-@app.route('/voice-direct', methods=['POST'])
+@app.route('/voice-direct', methods=['POST', 'GET'])
 def voice_direct():
     """Handle voice response for direct calls (automated message)"""
+    print(f"=== VOICE-DIRECT WEBHOOK CALLED ===")
+    print(f"Request method: {request.method}")
+    print(f"Request data: {request.form.to_dict() if request.method == 'POST' else request.args.to_dict()}")
+    
     response = VoiceResponse()
     
     # Play automated message
@@ -117,15 +131,22 @@ def voice_direct():
     response.pause(length=1)
     response.say('Thank you for answering. This is a test call. Have a great day!', voice='alice')
     
+    print(f"Returning TwiML: {str(response)}")
     return str(response), 200, {'Content-Type': 'text/xml'}
 
-@app.route('/voice', methods=['POST'])
+@app.route('/voice', methods=['POST', 'GET'])
 def voice():
     """Handle voice response for outbound calls"""
+    print(f"=== VOICE WEBHOOK CALLED ===")
+    print(f"Request method: {request.method}")
+    print(f"Request data: {request.form.to_dict() if request.method == 'POST' else request.args.to_dict()}")
+    
     response = VoiceResponse()
     
     # Get the target number from config
     target_number = app.config.get('CURRENT_TARGET')
+    
+    print(f"Target number from config: {target_number}")
     
     if target_number:
         response.say('Connecting your call now. Please wait.', voice='alice')
@@ -139,6 +160,7 @@ def voice():
     else:
         response.say('Hello! This is a call from your web calling application.', voice='alice')
     
+    print(f"Returning TwiML: {str(response)}")
     return str(response), 200, {'Content-Type': 'text/xml'}
 
 @app.route('/incoming-call', methods=['POST'])
@@ -154,13 +176,18 @@ def incoming_call():
     
     return str(response), 200, {'Content-Type': 'text/xml'}
 
-@app.route('/call-status', methods=['POST'])
+@app.route('/call-status', methods=['POST', 'GET'])
 def call_status():
     """Receive call status updates"""
-    call_sid = request.form.get('CallSid')
-    call_status = request.form.get('CallStatus')
+    print(f"=== CALL STATUS WEBHOOK ===")
+    call_sid = request.form.get('CallSid') or request.args.get('CallSid')
+    call_status_val = request.form.get('CallStatus') or request.args.get('CallStatus')
+    error_code = request.form.get('ErrorCode') or request.args.get('ErrorCode')
+    error_message = request.form.get('ErrorMessage') or request.args.get('ErrorMessage')
     
-    print(f"Call {call_sid} status: {call_status}")
+    print(f"Call {call_sid} status: {call_status_val}")
+    if error_code:
+        print(f"ERROR - Code: {error_code}, Message: {error_message}")
     
     return '', 200
 
