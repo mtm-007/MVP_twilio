@@ -1,0 +1,4 @@
+vonage
+vonage-voice
+flask
+PyJWT
