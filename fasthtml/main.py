@@ -4,7 +4,19 @@ from fasthtml.common import *
 
 app, rt = fast_app(live=True)
 
+def numList(i):
+    return Ul(*[Li(o)for o in range(i)])
+
 @rt('/')
-def get():return Div(P("FIrst FastHtml webpage with python !"))
+def get():
+    nums = numList(5)
+    return Titled('Greeting'
+                  ,Div(P("FIrst FastHtml webpage with python !")),
+                  Div(nums, id="stuff", hx_get='/repo'),
+                  )
+
+@rt('/repo')
+def get():
+    return P('Repo link here.')
 
 serve()
