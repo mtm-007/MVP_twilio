@@ -2,21 +2,15 @@ from fasthtml.common import *
 #from fasthtml import common as fh
 
 
-app, rt = fast_app(live=True)
-
-def numList(i):
-    return Ul(*[Li(o)for o in range(i)])
+app, rt, todos, TodoList = fast_app('todos.db',live=True, 
+                                id=int, title=str, done=bool, pk='id')
 
 @rt('/')
 def get():
-    nums = numList(5)
-    return Titled('Greeting'
-                  ,Div(P("FIrst FastHtml webpage with python !")),
-                  Div(nums, id="stuff", hx_get='/repo'),
+    #todos.insert(TodoList(title='Second todo', done=False))
+    items = [Li(o) for o in todos()]
+    return Titled('Todos List',
+                  Ul(*items),
                   )
-
-@rt('/repo')
-def get():
-    return P('Repo link here.')
 
 serve()
