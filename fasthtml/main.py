@@ -1,5 +1,4 @@
 from fasthtml.common import *
-#from fasthtml import common as fh
 
 def render(todo):
     tid = f'todo-{todo.id}'
@@ -10,16 +9,24 @@ def render(todo):
               id=tid)
 
 app, rt, todos, Todo = fast_app(
-        'todos.db', live=True, 
+        'data/todos.db',
         tbls={"todos":dict(id=int, title=str, render=render, done=bool, pk='id')})
+
+def mk_input(): return Input(placeholder='Add a new todo', id='title', hx_swap_oob='true')
 
 @rt('/')
 def get():
-    #todos.insert(Todo(title="second todo", done=False))
-    #items = [Li(o) for o in todos()]
+    frm = Form(Group(mk_input(), 
+                     Button("Add")),
+               hx_post='/', target_id='todo-list', hx_swap='beforeend')
     return Titled('Todos List',
-                  Ul(*todos()),
+                  Card(
+                        Ul(*todos(), id='todo-list'),
+                        header=frm)
                   )
+
+@rt('/')
+def post(todo:Todo): return todos.insert(todo), mk_input()
 
 @rt('/{tid}')
 def delete(tid:int):todos.delete(tid)
