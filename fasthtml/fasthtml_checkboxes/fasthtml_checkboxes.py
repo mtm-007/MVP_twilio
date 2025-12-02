@@ -17,7 +17,13 @@ css_path_remote = "/assets/styles.css"
 
 #helper function for ip address
 def get_real_ip(request):
-    """get real client IP,accounting for proxies"""
+    """get real client IP,accounting for proxies and cloudflare"""
+    #cloudflare-specific header (most reliable)
+    cf_connecting_ip = request.headers.get('CF-Connecting-IP')
+    if cf_connecting_ip:
+        return cf_connecting_ip
+    
+    #standard proxy headers
     forwarded_for = request.headers.get('X-Forwarded-For')
     if forwarded_for:
         #X-forwarded can cantain multiple IPs, first one is the client
