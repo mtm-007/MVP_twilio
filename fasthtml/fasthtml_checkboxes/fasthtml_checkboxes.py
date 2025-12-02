@@ -51,6 +51,12 @@ async def get_geo(ip:str):
     #if all fail
     return data
 async def record_visitors(ip,user_agent, geo):
+    visitors = recent_visitors.get("list", [])
+    for v in visitors:
+        if v.get("ip") == ip:
+            v["timestamp"] = time.time()
+            recent_visitors["list"] = visitors[-100:]
+    #if Ip not found, add new
     entry = {
         "ip": ip,
         "user_agent": user_agent[:120],
@@ -59,13 +65,8 @@ async def record_visitors(ip,user_agent, geo):
         "country": geo.get("country") or geo.get("country_name"),
         "timestamp": time.time(),
     }
-
-    #keep the last 100
-    visitors = recent_visitors.get("list", [])
     visitors.append(entry)
-    visitors = visitors[-100:]
-    recent_visitors["list"] = visitors
-
+    recent_visitors["list"] = visitors[-100:]
 
 css_path_local = Path(__file__).parent / "style.css"
 css_path_remote = "/assets/styles.css"
