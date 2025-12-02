@@ -16,7 +16,7 @@ db = modal.Dict.from_name("fasthtml-checkboxes-db", create_if_missing=True)
 geo_cache = modal.Dict.from_name("ip-geo-cache", create_if_missing=True)
 
 #New geolocation helper function
-async def get_geo(ip:str);
+async def get_geo(ip:str):
     """Return geo info from ip using cache + fallback providers"""
     #check cache first
     if ip in geo_cache:
