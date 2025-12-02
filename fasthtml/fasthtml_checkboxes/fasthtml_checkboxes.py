@@ -47,10 +47,9 @@ async def get_geo(ip:str):
     except Exception:
         pass
     #last resort 
-    data = {"ip": ip, "city": None, "country": None, "zip":None}
+    data = {"ip": ip, "city": None, "country": None, "zip": None}
     #if all fail
-    return {"error": "lookup_failed"}
-
+    return data
 async def record_visitors(ip,user_agent, geo):
     entry = {
         "ip": ip,
@@ -254,7 +253,7 @@ def web():
             fh.Tr(
                 fh.Td(v["ip"]),
                 fh.Td(v["city"] or "-"),
-                fh.Td(v["zip"] or "-"),
+                fh.Td(v.get("zip", "-")),
                 fh.Td(v["country"] or "-"),
                 fh.Td(time.strftime("%H:%M:%S", time.localtime(v["timestamp"]))),
             )
