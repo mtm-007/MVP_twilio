@@ -129,8 +129,11 @@ def web():
         on_shutdown=[on_shutdown],
         hdrs=[fh.Style(style)],
     )
-    request_count = 0
-    last_throughput_log = time.time()
+    metrics_for_count = {
+        "request_count" : 0,
+        "last_throughput_log" : time.time()
+    }
+
     throughput_lock = asyncio.Lock()
 
     #ASGI Middleware for latency + throughput logging
@@ -146,15 +149,15 @@ def web():
 
         #update throughput counter
         async with throughput_lock:
-            request_count +=1
+            metrics_for_count["request_count"] +=1
             now = time.time()
 
             #log throughput every 5 seconds
             if now - last_throughput_log >=5:
-                rsp = request_count / (now - last_throughput_log)
+                rsp = metrics_for_count["request_count"] / (now - metrics_for_count["last_throughput_log"])
                 print(f"[THROUGHPUT] {rsp:.2f} req/sec over last 5s")
-                request_count = 0
-                last_throughput_log = now
+                metrics_for_count["request_count"] = 0
+                metrics_for_count["last_throughput_log"] = now
         return response
     
     @app.get("/")
