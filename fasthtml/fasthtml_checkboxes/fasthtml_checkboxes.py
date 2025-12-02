@@ -153,7 +153,7 @@ def web():
             now = time.time()
 
             #log throughput every 5 seconds
-            if now - last_throughput_log >=5:
+            if now - metrics_for_count["last_throughput_log"] >=5:
                 rsp = metrics_for_count["request_count"] / (now - metrics_for_count["last_throughput_log"])
                 print(f"[THROUGHPUT] {rsp:.2f} req/sec over last 5s")
                 metrics_for_count["request_count"] = 0
