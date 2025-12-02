@@ -1,0 +1,7 @@
+# modal.toml
+
+[app]
+name = "fasthtml-checkboxes"
+
+[function.web]
+max_containers = 1
