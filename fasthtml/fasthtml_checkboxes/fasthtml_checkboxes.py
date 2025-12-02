@@ -6,6 +6,7 @@ import modal
 import fasthtml.common as fh
 import inflect
 import httpx
+import asyncio
 
 
 N_CHECKBOXES=10000
@@ -128,6 +129,33 @@ def web():
         on_shutdown=[on_shutdown],
         hdrs=[fh.Style(style)],
     )
+    request_count = 0
+    last_throughput_log = time.time()
+    throughput_lock = asyncio.Lock()
+
+    #ASGI Middleware for latency + throughput logging
+    @app.middleware("http")
+    async def metrics_middleware(request, call_next):
+        global request_count, last_throughput_log
+
+        start = time.time()
+        response = await call_next(request)
+        duration = (time.time() - start) * 100 #ms
+        #----log latency
+        print(f"[Latency] {request.url.path} -> {duration:.2f} ms")
+
+        #update throughput counter
+        async with throughput_lock:
+            request_count +=1
+            now = time.time()
+
+            #log throughput every 5 seconds
+            if now - last_throughput_log >=5:
+                rsp = request_count / (now - last_throughput_log)
+                print(f"[THROUGHPUT] {rsp:.2f} req/sec over last 5s")
+                request_count = 0
+                last_throughput_log = now
+        return response
     
     @app.get("/")
     async def get(request):
