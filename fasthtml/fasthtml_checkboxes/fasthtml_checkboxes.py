@@ -73,11 +73,10 @@ def web():
     )
     @app.get("/")
     async def get(request):
-        #temporarily log all headers
-        print(f"[DEBUG] All headers: {dict(request.headers)}")
         #log IP address
         client_ip = get_real_ip(request)
-        print(f"[HOME] New Client connected - IP: {client_ip}")
+        user_agent = request.headers.get('user-agent', 'unknown')
+        print(f"[HOME] New Client connected - IP: {client_ip} - User-Agent: {user_agent[:80]}...")
 
         #register a new client
         client = Client()
@@ -112,7 +111,8 @@ def web():
     @app.post("/checkbox/toggle/{i}/{client_id}")
     async def toggle(request, i:int,client_id:str):
         client_ip = get_real_ip(request)
-        print(f"[TOGGLE] Checkbox {i} toggled by {client_id[:8]}... - IP: {client_ip}")
+        user_agent = request.headers.get('user-agent', 'unknown')
+        print(f"[TOGGLE] Checkbox {i} toggled by {client_id[:8]}... - IP: {client_ip} - UserAg: {user_agent[:50]}...")
 
         async with checkboxes_mutex:
             checkboxes[i]= not checkboxes[i]
