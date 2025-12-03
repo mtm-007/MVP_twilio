@@ -15,9 +15,11 @@ from redis.asyncio import Redis
 
 N_CHECKBOXES=10000
 
-redis_image = Image.debian_slim(python_version="3.12").apt_install("redis-server")
+#redis_image = Image.debian_slim(python_version="3.12").apt_install("redis-server")
 
 app = modal.App("fasthtml-checkboxes")
+
+volume = modal.Volume.from_name("redis-data-vol", create_if_missing=True)
 
 checkboxes_key = "checkboxes"
 clients = {}
@@ -109,13 +111,23 @@ app_image = (
     .add_local_file(css_path_local,remote_path=css_path_remote)
     )
 
-@app.function( image = app_image, max_containers=1,)
+@app.function( 
+        image = app_image, 
+        max_containers=1,
+        volumes={"/data": volume},)
+
 @modal.concurrent(max_inputs=1000)
 @modal.asgi_app()
 def web():
     
     redis_process = subprocess.Popen(
-        ["redis-server", "--protected-mode", "no","--bind","127.0.0.1", "--port", "6379"],
+        ["redis-server", 
+         "--protected-mode", "no",
+         "--bind","127.0.0.1", 
+         "--port", "6379", 
+         "--dir", "/data", #store data in persistent volume
+         "--save", "86400", "1", #save once per day
+         "--save", "" ], #disable all other automatic saves
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL
     )
@@ -123,7 +135,7 @@ def web():
     time.sleep(1)
 
     redis = Redis.from_url("redis://127.0.0.1:6379")
-    print("Redis server started succesfully")
+    print("Redis server started succesfully with persistent storage")
 
 
     async def init_checkboxes():
@@ -133,10 +145,19 @@ def web():
             print("initialized checkboxes in Redis")
 
     async def on_shutdown():
-        print("Shutting down...")
+        print("Shutting down... Saving Redis data")
+        try:
+            await redis.save()
+            print("Redis data saved succesfully")
+        except Exception as e:
+            print(f"Error saving Redis data: {e}")
+
         await redis.close() #not necessarily needed here just best practice
         redis_process.terminate()
         redis_process.wait()
+
+        volume.commit()
+        print("Volume committed  -data persisted")
 
     style= open(css_path_remote, "r").read()
     app, _ = fh.fast_app(
