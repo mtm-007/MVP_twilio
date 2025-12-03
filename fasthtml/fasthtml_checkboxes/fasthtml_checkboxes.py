@@ -107,37 +107,50 @@ image = modal.Image.debian_slim(python_version="3.12").pip_install(
         ).apt_install("redis-server")
 
 @app.function(
-    image = image
-    .add_local_file(css_path_local,remote_path=css_path_remote),
+    image = image.add_local_file(css_path_local,remote_path=css_path_remote),
     max_containers=1,
-    container_idle_timeout=300,
+    scaledown_window=300,
 )
+import subprocess
+
+redis_process = None
+redis = None
+
+def start_redis():
+    """Start redis server once when container initializes"""
+    global redis_process, redis
+    if redis_process is None:
+        print("starting redis server...")
+        redis_process = subprocess.Popen(
+            ["redis-server", "--port", "6379", "--bind", "127.0.0.1", "--protect-mode", "no"],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL
+        )
+        time.sleep(2) #give redis a moment to start
+
+        REDIS_URL = f"redis://127.0.0.1:6379"
+        redis = Redis.from_url(REDIS_URL)
+        print("redis server started succesfully")
+
+    return redis
+
+
 
 @modal.concurrent(max_inputs=1000)
 @modal.asgi_app()
 def web():
-    #start redis in the background
-    redis_process = subprocess.Popen(
-        ["redis-server", "--port", "6379", "--bind", "127.0.0.1", "--protect-mode", "no"],
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL
-    )
-
-    time.sleep(1) #give redis a moment to start
-
-    REDIS_URL = f"redis://127.0.0.1:6379"
-    redis = Redis.from_url(REDIS_URL)
-
+    redis_client = start_redis()
+    
     async def init_checkboxes():
-        exists = await redis.exists(checkboxes_key)
+        exists = await redis_client.exists(checkboxes_key)
         if not exists:
-            await redis.rpush(checkboxes_key, *[json.dumps(False)]*N_CHECKBOXES)
+            await redis_client.rpush(checkboxes_key, *[json.dumps(False)]*N_CHECKBOXES)
             print("initialized checkboxes in Redis")
 
 
     async def on_shutdown():
         print("Redis-backed checkbox state persisted automatically.")
-        await redis.close() #not necessarily needed here just best practice
+        await redis_client.close() #not necessarily needed here just best practice
         redis_process.terminate()
         redis_process.wait()
 
@@ -187,8 +200,8 @@ def web():
         user_agent = request.headers.get('user-agent', 'unknown')
 
         #geo location look up
-        geo = await get_geo(client_ip, redis)
-        await record_visitors(client_ip, user_agent, geo, redis)
+        geo = await get_geo(client_ip, redis_client)
+        await record_visitors(client_ip, user_agent, geo, redis_client)
         
         city = geo.get("city")
         zip_code = geo.get('postal')
@@ -201,7 +214,7 @@ def web():
         async with  clients_mutex:
             clients[client.id] =client
 
-        checkbox_raw = await redis.lrange(checkboxes_key, 0, -1)
+        checkbox_raw = await redis_client.lrange(checkboxes_key, 0, -1)
         checkboxes_values = [json.loads(v) for v in checkbox_raw]
 
         checkbox_array = [ 
@@ -232,8 +245,8 @@ def web():
         client_ip = get_real_ip(request)
         user_agent = request.headers.get('user-agent', 'unknown')
 
-        geo = await get_geo(client_ip, redis)
-        await record_visitors(client_ip, user_agent, geo, redis)
+        geo = await get_geo(client_ip, redis_client)
+        await record_visitors(client_ip, user_agent, geo, redis_client)
 
         city = geo.get("city")
         zip_code = geo.get('postal')
@@ -244,9 +257,9 @@ def web():
             f"IP: {client_ip} | {city}, {zip_code}, {country} | ISP: {isp} | - User-Agent: {user_agent[:50]}...")
 
         async with clients_mutex:
-            current = await redis.lindex(checkboxes_key, i)
+            current = await redis_client.lindex(checkboxes_key, i)
             new_value = not json.loads(current)
-            await redis.lset(checkboxes_key, i, json.dumps(new_value))
+            await redis_client.lset(checkboxes_key, i, json.dumps(new_value))
         
             expired = []
             for client in clients.values():
@@ -277,17 +290,17 @@ def web():
             diffs_list = client.pull_diffs()
         
         client_ip = get_real_ip(request)
-        geo = await get_geo(client_ip, redis)
+        geo = await get_geo(client_ip, redis_client)
         city = geo.get("city")
         zip_code = geo.get('postal')
         country = geo.get("country_name") or geo.get("country")
         isp = geo.get("org") or geo.get("isp")
         print(
             f"[DIFFS] Sending {len(diffs)} diffs to {client_id[:8]}| IP: {client_ip} |"
-            f"{city}, {zip_code}, {country}, | diff sent"
+            f"{city}, {zip_code}, {country}, | ISP: {isp} diff sent"
             )
 
-        checkbox_raw = await redis.lrange(checkboxes_key, 0, -1)
+        checkbox_raw = await redis_client.lrange(checkboxes_key, 0, -1)
         checkboxes_values = [json.loads(v) for v in checkbox_raw]
 
         # async with checkboxes_mutex:
@@ -305,7 +318,7 @@ def web():
     
     @app.get("/visitors")
     async def visitors_page(request):
-        visitors_raw = await redis.lrange("recent_visitors", 0, -1)
+        visitors_raw = await redis_client.lrange("recent_visitors", 0, -1)
         visitors = [json.loads(v) for v in visitors_raw]
 
         rows = [
