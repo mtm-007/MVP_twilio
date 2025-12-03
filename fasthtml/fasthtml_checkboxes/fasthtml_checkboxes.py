@@ -120,7 +120,7 @@ def web():
         stderr=subprocess.DEVNULL
     )
 
-    time.sleep(2)
+    time.sleep(1)
 
     redis = Redis.from_url("redis://127.0.0.1:6379")
     print("Redis server started succesfully")
