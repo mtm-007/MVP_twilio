@@ -7,24 +7,31 @@ import fasthtml.common as fh
 import inflect
 import httpx
 import asyncio
+import os
+import json
+from redis.asyncio import Redis
 
 
 N_CHECKBOXES=10000
 
+redis_sidecar = modal.Image.debian_slim().pip_install("redis>=5.3.0").run_redis()
+
+REDIS_URL = f"redis://{redis_sidecar.hostname}:6379"
+redis = Redis.from_url(REDIS_URL)
+
 app = modal.App("fasthtml-checkboxes")
-db = modal.Dict.from_name("fasthtml-checkboxes-db", create_if_missing=True)
 
-#new: Modal dict for caching IP geolocation results
-geo_cache = modal.Dict.from_name("ip-geo-cache", create_if_missing=True)
-
-recent_visitors = modal.Dict.from_name("fasthtml-recent-visitors", create_if_missing=True)
+checkboxes_key = "checkboxes"
+clients = {}
+clients_mutex = Lock()
 
 #New geolocation helper function
 async def get_geo(ip:str):
     """Return geo info from ip using cache + fallback providers"""
     #check cache first
-    if ip in geo_cache:
-        return geo_cache[ip]
+    cached = await redis.get(f"geo:{ip}")
+    if cached:
+        return json.loads(cached)
     #primary provider
     try:
         async with httpx.AsyncClient(timeout=3.0) as client:
@@ -32,7 +39,7 @@ async def get_geo(ip:str):
         if r.status_code == 200:
             data = r.json()
             if "country_name" in data:
-                geo_cache[ip] = data
+                await redis.set(f"geo:{ip}", json.dumps(data), ex=86400)
                 return data
     except Exception:
         pass
@@ -43,7 +50,7 @@ async def get_geo(ip:str):
         if r.status_code == 200:
             data = r.json()
             if data.get("status") == "success":
-                geo_cache[ip] = data
+                await redis.set(f"geo:{ip}", json.dumps(data), ex=86400)
                 return data
     except Exception:
         pass
@@ -51,23 +58,33 @@ async def get_geo(ip:str):
     data = {"ip": ip, "city": None, "country": None, "zip": None}
     #if all fail
     return data
+
 async def record_visitors(ip,user_agent, geo):
-    visitors = recent_visitors.get("list", [])
+    visitors_raw = await redis.lrange("recent_visitors", 0, -1)
+    visitors = [json.loads(v) for v in visitors_raw]
+
+    found = False
     for v in visitors:
         if v.get("ip") == ip:
             v["timestamp"] = time.time()
-            recent_visitors["list"] = visitors[-100:]
+            found = True
+            break
+            
     #if Ip not found, add new
-    entry = {
-        "ip": ip,
-        "user_agent": user_agent[:120],
-        "city": geo.get("city"),
-        "zip": geo.get("postal") or geo.get("zip"),
-        "country": geo.get("country") or geo.get("country_name"),
-        "timestamp": time.time(),
-    }
-    visitors.append(entry)
-    recent_visitors["list"] = visitors[-100:]
+    if not found:
+        entry = {
+            "ip": ip,
+            "user_agent": user_agent[:120],
+            "city": geo.get("city"),
+            "zip": geo.get("postal") or geo.get("zip"),
+            "country": geo.get("country") or geo.get("country_name"),
+            "timestamp": time.time(),
+        }
+        visitors.append(entry)
+
+    await redis.delete("recent_visitors")
+    for v in visitors[-100:]:
+        await redis.rpush("recent_visitors", json.dumps(v))
 
 css_path_local = Path(__file__).parent / "style.css"
 css_path_remote = "/assets/styles.css"
@@ -94,36 +111,31 @@ def get_real_ip(request):
     #fallback to direct client host 
     return request.client.host
 
+image = modal.Image.debian_slim(python_version="3.12").pip_install(
+        "python-fasthtml==0.12.35", "inflect~=7.4.0", "httpx==0.27.0" ,"redis>=5.3.0" 
+        )
+
 @app.function(
-    image = modal.Image.debian_slim(python_version="3.12").pip_install(
-        "python-fasthtml==0.12.35", "inflect~=7.4.0", "httpx==0.27.0")
+    image = image
     .add_local_file(css_path_local,remote_path=css_path_remote),
     max_containers=1,
+    sidecars = [redis_sidecar],
 )
 
 @modal.concurrent(max_inputs=1000)
 @modal.asgi_app()
 def web():
+    async def init_checkboxes():
+        #checkboxes_key = "checkboxes"
+        exists = await redis.exists(checkboxes_key)
+        if not exists:
+            await redis.rpush(checkboxes_key, *[json.dumps(False)]*N_CHECKBOXES)
+            print("initialized checkboxes in Redis")
 
-    #connected clients are tracked in memory
-    clients = {}
-    clients_mutex = Lock()
-    #keep all checkbox states in memory during operation, and persist to modal dict across restarts
-    checkboxes = db.get("checkboxes", [])
-    checkboxes_mutex = Lock()
 
-    if len(checkboxes) == N_CHECKBOXES:
-        print("Restored checkboxes state from previous session.")
-    else:
-        print("Initializing checkbox state.")
-        checkboxes = [False] * N_CHECKBOXES
-    
     async def on_shutdown():
-        # Handle the shutdown event by persisting current state to modal dict
-        async with checkboxes_mutex:
-            db["checkboxes"]=checkboxes
-        print("checkbox state persisted.")
-    
+        print("Redis-backed checkbox state persisted automatically.")
+        
     style= open(css_path_remote, "r").read()
     app, _ = fh.fast_app(
         on_shutdown=[on_shutdown],
@@ -139,11 +151,11 @@ def web():
     #ASGI Middleware for latency + throughput logging
     @app.middleware("http")
     async def metrics_middleware(request, call_next):
-        global request_count, last_throughput_log
+        #global request_count, last_throughput_log
 
         start = time.time()
         response = await call_next(request)
-        duration = (time.time() - start) * 100 #ms
+        duration = (time.time() - start) * 1000 #ms
         #----log latency
         print(f"[Latency] {request.url.path} -> {duration:.2f} ms")
 
@@ -162,6 +174,8 @@ def web():
     
     @app.get("/")
     async def get(request):
+        await init_checkboxes()
+
         #log IP address
         client_ip = get_real_ip(request)
         user_agent = request.headers.get('user-agent', 'unknown')
@@ -181,6 +195,9 @@ def web():
         async with  clients_mutex:
             clients[client.id] =client
 
+        checkbox_raw = await redis.lrange(checkboxes_key, 0, -1)
+        checkboxes_values = [json.loads(v) for v in checkbox_raw]
+
         checkbox_array = [ 
             fh.CheckboxX(
                 id=f"cb-{i}",
@@ -188,7 +205,7 @@ def web():
                 # when clicked, that checkbox will send a POST request to the server with its index
                 hx_post=f"/checkbox/toggle/{i}/{client.id}",  
             )
-                for i,val in enumerate(checkboxes)
+                for i,val in enumerate(checkboxes_values)
             ]
         
         return(
@@ -213,6 +230,7 @@ def web():
 
         geo = await get_geo(client_ip)
         await record_visitors(client_ip, user_agent, geo)
+
         city = geo.get("city")
         zip = geo.get('postal')
         country = geo.get("country_name") or geo.get("country")
@@ -221,10 +239,11 @@ def web():
             f"[TOGGLE] Checkbox {i} toggled by {client_id[:8]} | Checkbox {i} |"
             f"IP: {client_ip} | {city}, {zip}, {country} | ISP: {isp} | - User-Agent: {user_agent[:50]}...")
 
-        async with checkboxes_mutex:
-            checkboxes[i]= not checkboxes[i]
-        
         async with clients_mutex:
+            current = await redis.lindex(checkboxes_key, i)
+            new_value = not json.loads(current)
+            await redis.lset(checkboxes_key, i, json.dumps(new_value))
+        
             expired = []
             for client in clients.values():
                 if client.id == client_id:
@@ -265,21 +284,26 @@ def web():
             f"{city}, {zip}, {country}, | diff sent"
             )
 
-        async with checkboxes_mutex:
-            diff_array = [
-                fh.CheckboxX(
-                    id=f"cb-{i}",
-                    checked= checkboxes[i],
-                    # when clicked, that checkbox will send a POST request to the server with its index
-                    hx_post=f"/checkbox/toggle/{i}/{client_id}",
-                    hx_swap_oob="true",# allows us to later push diffs to arbitrary checkboxes by id
-                )
-                for i in diffs
-            ]
+        checkbox_raw = await redis.lrange(checkboxes_key, 0, -1)
+        checkboxes_values = [json.loads(v) for v in checkbox_raw]
+
+        # async with checkboxes_mutex:
+        diff_array = [
+            fh.CheckboxX(
+                id=f"cb-{i}",
+                checked= checkboxes_values[i],
+                # when clicked, that checkbox will send a POST request to the server with its index
+                hx_post=f"/checkbox/toggle/{i}/{client_id}",
+                hx_swap_oob="true",# allows us to later push diffs to arbitrary checkboxes by id
+            )
+            for i in diffs
+        ]
         return diff_array
+    
     @app.get("/visitors")
     async def visitors_page(request):
-        visitors = recent_visitors.get("list", [])
+        visitors_raw = await redis.lrange("recent_visitors", 0, -1)
+        visitors = [json.loads(v) for v in visitors_raw]
 
         rows = [
             fh.Tr(
