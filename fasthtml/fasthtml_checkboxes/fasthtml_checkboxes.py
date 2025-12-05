@@ -274,12 +274,12 @@ def web():
     #run preload async in backgound without blocking startup request
     #fire_and_forget(preload_cache())
 
-    #style= open(css_path_remote, "r").read()
+    style= open(css_path_remote, "r").read()
     app, _ = fh.fast_app(
         on_shutdown=[on_shutdown],
         on_startup=[lambda: fire_and_forget(preload_cache())], #runs once safely
-        #hdrs=[fh.Style(style)],
-        hdrs=[fh.Link(rel="stylesheet", href= "/assets/style.css")],
+        hdrs=[fh.Style(style)],
+        #hdrs=[fh.Link(rel="stylesheet", href= "/assets/style.css")],
     )
     
     metrics_for_count = { "request_count" : 0,  "last_throughput_log" : time.time() }
