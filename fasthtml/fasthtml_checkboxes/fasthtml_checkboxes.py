@@ -144,7 +144,7 @@ app_image = (
         max_containers=1,
         volumes={"/data": volume},)
 
-@modal.concurrent(max_inputs=5000)
+@modal.concurrent(max_inputs=1000)
 @modal.asgi_app()
 def web():
     # Start redis server locally inside the container (persisted to volume)
