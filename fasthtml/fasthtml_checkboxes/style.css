@@ -23,3 +23,17 @@ input:not([type=submit], [type=button], [type=reset], [type=range], [type=file],
     --pico-box-shadow: 0 0 0 var(--pico-outline-width) rgba (127,238,100, 0.25);
     --pico-border-color: rgba (127,238,100, 0.50);
 }
+
+.grid {
+    display: grid;
+    grid-template-columns: repeat(100, 1fr);
+    gap: 6px;
+    max-width: 1400px;
+    margin: 2rem auto;
+  }
+  .cb {
+    width: 18px;
+    height: 18px;
+    accent-color: #58a6ff;
+  }
+    

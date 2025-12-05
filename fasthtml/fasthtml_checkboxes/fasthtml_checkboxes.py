@@ -307,6 +307,24 @@ def web():
                 metrics_for_count["last_throughput_log"] = now
         return response
 
+    @app.get("/grid/{client_id}")
+    async def grid(client_id:str);
+        #this runs once per client, returns ~450 KB instead of 2.2MB
+        boxes = []
+        for i, val in enumerate(checkbox_cache):
+            boxes.append(
+                fh.Input(
+                    type="checkbox",
+                    id=f"cb-{i}",
+                    name ="cbs",
+                    checked= val,
+                    hx_post= f"/checkbox/toggle/{i}/{client_id}",#make_hx_post(i, client.id), # when clicked, that checkbox will send a POST request to the server with its index
+                    hx_swap="none",
+                    cls="cb"
+                )
+            )
+        return fh.Div(*boxes, cls="grid")
+    
     @app.get("/")
     async def get(request):
     
@@ -322,19 +340,21 @@ def web():
         #Load checkboxes immediately
         await init_checkboxes()
 
-        checkbox_array = [ 
-            fh.CheckboxX(
-                id=f"cb-{i}",
-                checked= val,
-                hx_post= f"/checkbox/toggle/{i}/{client.id}",#make_hx_post(i, client.id), # when clicked, that checkbox will send a POST request to the server with its index
-            )
-                for i,val in enumerate(checkbox_cache)
-            ]
-
         #fire and forget - truly non blocking, as before asgi waits the background task to finish
         fire_and_forget(background_geo_logging(client_ip,user_agent, redis))
 
         print(f"[HOME] Client {client.id[:8]} | IP : {client_ip} | Page served (geo logging in background)")
+
+        checkbox_array = [ 
+            fh.Input(
+                type ="checkbox",
+                id=f"cb-{i}",
+                checked= val,
+                hx_post= f"/checkbox/toggle/{i}/{client.id}",#make_hx_post(i, client.id), # when clicked, that checkbox will send a POST request to the server with its index
+                hx_swap="none",
+                cls="cb")
+            for i,val in enumerate(checkbox_cache)
+        ]
 
         #return page fast (no blocking by geo logging API) 
         return(
@@ -342,10 +362,10 @@ def web():
             fh.Main(
                 fh.H1(
                     f"{inflect.engine().number_to_words(N_CHECKBOXES).title()} Checkboxes"),
-                    fh.Div( *checkbox_array, id="checkbox-array",),
+                    fh.Div( *checkbox_array, id="checkbox-array",cls="grid"),
                     cls="container",
                     # use HTMX to poll for diffs to apply
-                    hx_trigger="every 1s", #poll every second
+                    hx_trigger="every 800s", #poll every second
                     hx_get=f"/diffs/{client.id}", #call the diffs  endpoint
                     hx_swap="none", #dont replace the entire page
                 ),
