@@ -308,7 +308,7 @@ def web():
         return response
 
     @app.get("/grid/{client_id}")
-    async def grid(client_id:str);
+    async def grid(client_id:str):
         #this runs once per client, returns ~450 KB instead of 2.2MB
         boxes = []
         for i, val in enumerate(checkbox_cache):
