@@ -110,7 +110,7 @@ async def record_visitors(ip, user_agent, geo, redis):
         pass
 
 css_path_local = Path(__file__).parent / "style.css"
-css_path_remote = "/assets/styles.css"
+css_path_remote = "/assets/style.css"
 
 
 #helper function for ip address
@@ -170,7 +170,7 @@ app_image = (
     modal.Image.debian_slim(python_version="3.12")
     .pip_install("python-fasthtml==0.12.35", "inflect~=7.4.0", "httpx==0.27.0" ,"redis>=5.3.0")
     .apt_install("redis-server")
-    .add_local_file(css_path_local,remote_path="/assets/styles.css")
+    .add_local_file(css_path_local,remote_path=css_path_remote)
     )
 
 @app.function( 
@@ -279,7 +279,7 @@ def web():
         on_shutdown=[on_shutdown],
         on_startup=[lambda: fire_and_forget(preload_cache())], #runs once safely
         #hdrs=[fh.Style(style)],
-        hdrs=[fh.Link(rel="stylesheet", href= "/assets/styles.css")],
+        hdrs=[fh.Link(rel="stylesheet", href= "/assets/style.css")],
     )
     
     metrics_for_count = { "request_count" : 0,  "last_throughput_log" : time.time() }
@@ -310,19 +310,14 @@ def web():
     @app.get("/grid/{client_id}")
     async def grid(client_id:str):
         #this runs once per client, returns ~450 KB instead of 2.2MB
-        boxes = []
-        for i, val in enumerate(checkbox_cache):
-            boxes.append(
-                fh.Input(
-                    type="checkbox",
-                    id=f"cb-{i}",
-                    name ="cbs",
-                    checked= val,
-                    hx_post= f"/checkbox/toggle/{i}/{client_id}",#make_hx_post(i, client.id), # when clicked, that checkbox will send a POST request to the server with its index
-                    hx_swap="none",
-                    cls="cb"
-                )
-            )
+        await init_checkboxes()
+        boxes = [
+            fh.Input( type="checkbox", id=f"cb-{i}",checked= val,
+                #name ="cbs",
+                hx_post= f"/checkbox/toggle/{i}/{client_id}",#make_hx_post(i, client.id), # when clicked, that checkbox will send a POST request to the server with its index
+                hx_swap="none", cls="cb")
+            for i, val in enumerate(checkbox_cache)
+        ]
         return fh.Div(*boxes, cls="grid")
     
     @app.get("/")
@@ -345,16 +340,16 @@ def web():
 
         print(f"[HOME] Client {client.id[:8]} | IP : {client_ip} | Page served (geo logging in background)")
 
-        checkbox_array = [ 
-            fh.Input(
-                type ="checkbox",
-                id=f"cb-{i}",
-                checked= val,
-                hx_post= f"/checkbox/toggle/{i}/{client.id}",#make_hx_post(i, client.id), # when clicked, that checkbox will send a POST request to the server with its index
-                hx_swap="none",
-                cls="cb")
-            for i,val in enumerate(checkbox_cache)
-        ]
+        # checkbox_array = [ 
+        #     fh.Input(
+        #         type ="checkbox",
+        #         id=f"cb-{i}",
+        #         checked= val,
+        #         hx_post= f"/checkbox/toggle/{i}/{client.id}",#make_hx_post(i, client.id), # when clicked, that checkbox will send a POST request to the server with its index
+        #         hx_swap="none",
+        #         cls="cb")
+        #     for i,val in enumerate(checkbox_cache)
+        # ]
 
         #return page fast (no blocking by geo logging API) 
         return(
@@ -362,12 +357,16 @@ def web():
             fh.Main(
                 fh.H1(
                     f"{inflect.engine().number_to_words(N_CHECKBOXES).title()} Checkboxes"),
-                    fh.Div( *checkbox_array, id="checkbox-array",cls="grid"),
+                    #fh.Div( *checkbox_array, id="checkbox-array",cls="grid"),
+                    fh.Div( "Loading checkboxes...", id="loading",cls="loading"),
+                    fh.Div(
+                        hx_get=f"/grid/{client.id}",
+                        hx_trigger="load", #"every 800s", #poll every second
+                        hx_swap="innerHTML", #dont replace the entire page
+                        hx_indicator = "loading"
+                    ),
                     cls="container",
-                    # use HTMX to poll for diffs to apply
-                    hx_trigger="every 800s", #poll every second
-                    hx_get=f"/diffs/{client.id}", #call the diffs  endpoint
-                    hx_swap="none", #dont replace the entire page
+                    # use HTMX to poll for diffs to apply 
                 ),
         )
 

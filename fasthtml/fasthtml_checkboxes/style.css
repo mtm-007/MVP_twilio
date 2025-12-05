@@ -36,4 +36,7 @@ input:not([type=submit], [type=button], [type=reset], [type=range], [type=file],
     height: 18px;
     accent-color:  #7fee64;
   }
+  .loading {
+    text-align: center; padding: 4rem; font-size: 1.5rem; color: #7fee64;
+  }
     
