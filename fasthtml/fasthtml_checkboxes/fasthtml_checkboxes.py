@@ -277,7 +277,7 @@ def web():
     style= open(css_path_remote, "r").read()
     app, _ = fh.fast_app(
         on_shutdown=[on_shutdown],
-        on_startup=[lambda: fire_and_forget(preload_cache())] #runs once safely
+        on_startup=[lambda: fire_and_forget(preload_cache())], #runs once safely
         hdrs=[fh.Style(style)],
     )
 
