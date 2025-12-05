@@ -14,7 +14,7 @@ import subprocess
 from redis.asyncio import Redis
 
 
-N_CHECKBOXES=10000
+N_CHECKBOXES=1000000
 
 app = modal.App("fasthtml-checkboxes")
 
