@@ -358,7 +358,7 @@ def web():
                 fh.H1(
                     f"{inflect.engine().number_to_words(N_CHECKBOXES).title()} Checkboxes"),
                     #fh.Div( *checkbox_array, id="checkbox-array",cls="grid"),
-                    fh.Div( "Loading checkboxes...", id="loading",cls="loading"),
+                    fh.Div( "Loading checkboxes...", id="loading",cls="loading htmx-request"),
                     fh.Div(
                         hx_get=f"/grid/{client.id}",
                         hx_trigger="load", #"every 800s", #poll every second
