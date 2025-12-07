@@ -26,9 +26,9 @@ checkboxes_key = "checkboxes"
 clients = {}
 clients_mutex = Lock()
 
-checkbox_cache = None
+checkbox_cache = {}
 checkbox_cache_loaded_at = 0.0
-CHECKBOX_CACHE_TTL = 300 #60 * 10 #keep for 10 minutes in memory
+CHECKBOX_CACHE_TTL = 600 #keep for 10 minutes in memory
 
 GEO_TTL_REDIS = 86400 
 CLIENT_GEO_TTL = 300.0  #client level in memory small cache (5min)
@@ -159,13 +159,7 @@ def web():
     print("Redis server started succesfully with persistent storage")
 
     async def init_checkboxes():
-        global checkbox_cache, checkbox_cache_loaded_at
-
-        if checkbox_cache is not None or time.time() - checkbox_cache_loaded_at <= CHECKBOX_CACHE_TTL:#checkbox_cache_expiry:
-            return checkbox_cache
-        print(f"[CACHE] Loading {N_CHECKBOXES: ,} checkboxes...")
-        start = time.time()
-
+        """Initilize Redis list if needed, but DON'T load all into memory """
         current_len = await redis.llen(checkboxes_key)
         if current_len < N_CHECKBOXES:
             #print(f"[CACHE] Initializing {N_CHECKBOXES:,} checkboxes...")
@@ -179,24 +173,76 @@ def web():
             await pipe.execute()
             print(f"[INIT] added {missing:,} missing checkboxes")
 
-        checkbox_raw = await redis.lrange(checkboxes_key, 0, -1)
-        checkbox_cache = [json.loads(v) for v in checkbox_raw]
+    async def get_checkbox_range_cached(start_idx: int, end_idx:int):
+        """ Load a specific range of chekcboxes, with caching"""
+        #check if we have them in cache
+        cached_values = []
+        missing_indices = []
+        #global checkbox_cache, checkbox_cache_loaded_at
+
+        for i in range(start_idx, end_idx):
+            if i in checkbox_cache:
+                cached_values.append((i, checkbox_cache[i]))
+            else:
+                missing_indices.append(i)
         
-        if len(checkbox_cache) < N_CHECKBOXES:
-            print(f"[FATAL] still misssing checkboxes! Got {len(checkbox_cache):,}, expected {N_CHECKBOXES}")
-            checkbox_cache.extend([False] * (N_CHECKBOXES - len(checkbox_cache)))
+        if missing_indices:
+            #use pipeline for batch loading
+            pipe = redis.pipeline()
+            for idx in missing_indices:
+                pipe.lindex(checkboxes_key, idx)
+            
+            results = await pipe.execute()
 
-        checkbox_cache_loaded_at = time.time()
-        elapsed_time = (time.time() - start) * 1000
-        print(f"[CACHE] Fully Loaded {len(checkbox_cache):,} checkboxes in {elapsed_time:.2f}ms")
+            #cache the results
+            for idx, result in zip(missing_indices, results):
+                value = json.loads(result) if result is not None else False
+                checkbox_cache[idx] = value
+                cached_values.append((idx, value))
 
-        return checkbox_cache
+        #sort by index to maintain order
+        cached_values.sort(key=lambda x:x[0])
+        return [v for _, v in cached_values]
+    
+
+        # if checkbox_cache is not None or time.time() - checkbox_cache_loaded_at <= CHECKBOX_CACHE_TTL:#checkbox_cache_expiry:
+        #     return checkbox_cache
+        # print(f"[CACHE] Loading {N_CHECKBOXES: ,} checkboxes...")
+        # start = time.time()
+
+
+        # checkbox_raw = await redis.lrange(checkboxes_key, 0, -1)
+        # checkbox_cache = [json.loads(v) for v in checkbox_raw]
+        
+        # if len(checkbox_cache) < N_CHECKBOXES:
+        #     print(f"[FATAL] still misssing checkboxes! Got {len(checkbox_cache):,}, expected {N_CHECKBOXES}")
+        #     checkbox_cache.extend([False] * (N_CHECKBOXES - len(checkbox_cache)))
+
+        # checkbox_cache_loaded_at = time.time()
+        # elapsed_time = (time.time() - start) * 1000
+        # print(f"[CACHE] Fully Loaded {len(checkbox_cache):,} checkboxes in {elapsed_time:.2f}ms")
+
+        # return checkbox_cache
     
     async def get_status():
-        await init_checkboxes()
-        checked = sum(1 for v in checkbox_cache if v)
+        """ Get checked/unchecked counts - use redis directly, not cache"""
+
+        sample_size = 10000
+        pipe = redis.pipeline()
+        step = N_CHECKBOXES//sample_size
+        for i in range(0, N_CHECKBOXES, step):
+            pipe.lindex(checkboxes_key, i)
+
+        samples = await pipe.execute()
+        checked_sample = sum(1 for s in samples if s and json.loads(s))
+        checked = int((checked_sample / len(samples)) * N_CHECKBOXES)
         unchecked = N_CHECKBOXES - checked
+
         return checked, unchecked
+        # await init_checkboxes()
+        # checked = sum(1 for v in checkbox_cache if v)
+        # unchecked = N_CHECKBOXES - checked
+        # return checked, unchecked
 
     async def on_shutdown():
         print("Shutting down... Saving Redis data")
@@ -265,14 +311,17 @@ def web():
         end_idx = min(offset + LOAD_MORE_SIZE, N_CHECKBOXES)
         print(f"[CHUNK] Loading {start_idx:,}-{end_idx:,} for {client_id[:8]}")
 
+        #load only this range
+        checked_values = await get_checkbox_range_cached(start_idx, end_idx)
+
         parts =[]
-        for i in range(start_idx, end_idx):
-            try:
-                is_checked = checkbox_cache[i]
-            except IndexError:
-                is_checked=False
-                checkbox_cache.append(False)
-                print(f"[HEAL] fixed missing checkbox {i}")
+        for i, is_checked in enumerate(checked_values, start=start_idx):
+            # try:
+            #     is_checked = checkbox_cache[i]
+            # except IndexError:
+            #     is_checked=False
+            #     checkbox_cache.append(False)
+            #     print(f"[HEAL] fixed missing checkbox {i}")
             
             checked_attr = "checked" if is_checked else ''
             parts.append(
@@ -339,20 +388,24 @@ def web():
         async with clients_mutex:
             client = clients.get(client_id)
                 
-            await init_checkboxes()
-            try:
+            #await init_checkboxes()
+
+            #Get current values
+            for i in checkbox_cache:
                 current = checkbox_cache[i]
-            except Exception:
+            else:
                 raw = await redis.lindex(checkboxes_key, i)
                 current = json.loads(raw) if raw is not None else False
 
             new_value = not current
-            checkbox_cache[i] = new_value
+            checkbox_cache[i] = new_value #Update cache
 
-            try:
-                await redis.lset(checkboxes_key, i, json.dumps(new_value))
-            except Exception:
-                print("warning: redis lset failed")
+            asyncio.create_task(redis.lset(checkboxes_key, i, json.dumps(new_value)))
+
+            # try:
+            #     await redis.lset(checkboxes_key, i, json.dumps(new_value))
+            # except Exception:
+            #     print("warning: redis lset failed")
 
             expired = []
             for client in clients.values():
@@ -370,6 +423,20 @@ def web():
 
         return ""
     
+    async def cleanup_cache_task():
+        """periodically clean up old cache entries"""
+        while True:
+            await asyncio.sleep(300)
+
+            #keep only the most recently accessed entries
+            if len(checkbox_cache) > 50000: # keep max 50k in memory
+                print(f"[CACHE] Clean up,current size: {len(checkbox_cache):,}")
+                #Remove random half of entries
+                keys_to_remove = list(checkbox_cache.keys())[::2]
+                for key in keys_to_remove:
+                    del checkbox_cache[key]
+                print(f"[CACHE] Cleanup to: {len(checkbox_cache):,}")
+
     #clients polling for outstanding diffs
     @app.get("/diffs/{client_id}")
     async def diffs(request, client_id:str):
