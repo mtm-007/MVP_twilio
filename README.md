@@ -1,2 +1,6 @@
-# MVP_twilio
-MVP app with Twilio for international calling
+## One Million Checkboxes
+
+One Million checkboxes web app created with 
+- FastHtml, 
+- deployed with modal serverless and 
+- implemented CI/CD with Github Actions.
