@@ -2,6 +2,7 @@ import os
 import subprocess
 from uuid import uuid4
 
+
 import markdown.extensions.fenced_code
 import stripe 
 from flask import(
@@ -23,6 +24,7 @@ app = Flask(__name__, static_folder='static', static_url_path='')
 #specify your apps urls
 DOMAIN = ""
 
+app.config["SECRET_KEY"] = os.environ["SECRET_KEY"]
 stripe.api_key = os.environ["STRIPE_API_KEY"]
 webhook_secret = os.environ["STRIPE_WEBHOOK_SECRET"]
 
@@ -132,8 +134,8 @@ def stripe_webhook():
 
     #verify the stripe webhook signature
     try:
-        event = stripe.Webhook..construct_event(payload, signature, webhook_secret) 
-    except stripe valueError:
+        event = stripe.Webhook.construct_event(payload, signature, webhook_secret) 
+    except ValueError:
         return jsonify({'error': 'Invalid payload'}), 400
     except stripe.error.SignatureVerificationError:
         return jsonify({'error': 'Invalid signature'}), 400
@@ -158,7 +160,7 @@ def stripe_webhook():
 #show readme
 @app.route('/readme')
 def readme():
-    readmefile = open("README.md", "r")
+    readme_file = open("README.md", "r")
     md_template_string = markdown.markdown(readme_file.read(), extensions=["fenced_code"])
 
     return md_template_string
