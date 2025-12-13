@@ -34,7 +34,7 @@ docker images | grep cog-
 
 ### clean docker build images
 docker rmi cog-monetizationprop cog-monetizationprop-base
-docker builder prune -f
+ocker builder prune -fd
 docker system prune -f
 docker system prune -a --volumes -f
 
