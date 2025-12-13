@@ -33,3 +33,15 @@ clipseg-cache/
 swin2sr-cache/
 weights-cache/
 tests/
+
+__pycache__/
+*.pyc
+*.pyo
+.git/
+.gitignore
+*.md
+.env
+.venv/
+*.log
+output*.png
+.cache/

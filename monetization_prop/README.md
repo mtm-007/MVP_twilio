@@ -1,4 +1,4 @@
-## downloading python=3.11 with conda
+## downloading python=3.11 with conda, or just use the latest lib versions for all with python=3.12
 sometimes evenif you have conda installed you have to add channels too, to start installing:
 
 ```bash
@@ -15,6 +15,20 @@ sudo chmod +x /usr/local/bin/cog
 
 cog init
 ```
+
+
+# running cog docker build and model inference
+```bash
+run:
+- time sudo cog predict -i prompt="wakkanda forever"
+```
+
+# Pushing to cog replicate, run with sudo to avoid authentication issues
+sudo cog login
+authenticate replicate api
+sudo chown -R $USER:$USER .
+sudo cog push r8.im/<replicate_username>/<model_name>
+
 ## Running out of spaces check cached pip libs
 
 ```bash

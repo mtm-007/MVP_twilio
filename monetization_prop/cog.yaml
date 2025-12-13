@@ -2,42 +2,33 @@
 # Reference: https://github.com/replicate/cog/blob/main/docs/yaml.md
 
 build:
-  gpu: False
-  #cuda: "11.8"
-  python_version: "3.11"
+  gpu: True
+  cuda: "12.8"
+  python_version: "3.12"
   system_packages:
-    - "libgl1-mesa-glx"
+    - "libgl1"
+    - "libglib2.0-0"
     - "ffmpeg"
     - "libsm6"
     - "libxext6"
     - "wget"
-  python_packages:
-    - "diffusers==0.28.2"
-    - "torch==2.0.1"
-    - "transformers==4.36.0"
-    - "huggingface-hub==0.20.2"
-    - "invisible-watermark==0.2.0"
-    - "accelerate==0.21.0"
-    - "pandas==2.0.3"
-    - "torchvision==0.15.2"
-    - "numpy==1.26.4"
-    - "pandas==2.0.3"
-    - "fire==0.5.0"
-    - "opencv-python==4.11.0.86"
-    - "mediapipe==0.10.21"
-    #- "tokenizers==0.12.0"  #let transformers handle it
-
-  # run:
-  #   - "mkdir -p /src/my_diffusion_pipeline"
-
-  #commands run after the environment is setup
-  # run:
-  #   - "echo env is ready!"
-  #   - "echo another command if needed"
   
-  # run:
-  #   - curl -o /usr/local/bin/pget -L "https://github.com/replicate/pget/releases/latest/download/pget_$(uname -s)_$(uname -m)" && chmod +x /usr/local/bin/pget
-  #   - wget http://thegiflibrary.tumblr.com/post/11565547760 -O face_landmarker_v2_with_blendshapes.task -q https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task
-    
+  python_packages:
+    - "uv"  # Install uv first
+  # Install uv and use it for faster package installation
+  run:
+    - "uv pip install --system  \
+      diffusers==0.36.0 \
+      torch==2.8.0 \
+      transformers==4.57.3 \ 
+      huggingface-hub==0.36.0 \
+      invisible-watermark==0.2.0 \ 
+      accelerate==1.12  \
+      pandas==2.1.4   \
+      torchvision==0.23.0  \
+      numpy==1.26.4  \
+      fire==0.7.1  \
+      opencv-python==4.11.0.86  \ 
+      mediapipe==0.10.21"  
+
 predict: "predict.py:Predictor"
-#train: "train.py:train"
