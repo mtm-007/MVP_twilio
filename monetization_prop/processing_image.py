@@ -3,22 +3,26 @@ import base64
 import replicate
 #import Sendinblue
 import sib_api_v3_sdk
-from sib_api_v3_sdk.reset import ApiException
+from sib_api_v3_sdk.rest import ApiException
 from PIL import Image
 from io import BytesIO
+from dotenv import load_dotenv
+
+load_dotenv()
 
 #replicate setup,with upscaling model for demo 
-replicate = replicate.Client(api_token=os.environ["REPLICATE_API_TOKEN"])
-replicate_url = ""
+#replicate = replicate.Client(api_token=os.environ["REPLICATE_API_TOKEN"])
+REPLICATE_API_TOKEN = os.getenv("REPLICATE_API_TOKEN")
+replicate_url = "mtm-007/custm_diffusion:4536d1407dddcdc365ecaee695283e2b1d3307bb214550c8e35d245abada3994"
 
 #email setup
 #sendinBlue api configuration
 configuration = sib_api_v3_sdk.Configuration()
-configuration.api_key['api_key'] = os.environ["BREVO_API_KEY"]
+#configuration.api_key['api_key'] = os.environ["BREVO_API_KEY"]
 #initialize the SendinBlue API instance
-api_instance = sib_api_v3_sdk = sib_api_v3_sdk.TransactionEmailsApi(
-    sib_api_v3_sdk.ApiClient(configuration))
-
+API_V3_KEY = os.getenv("SIB_API_V3_KEY")
+sib_api_v3_sdk.configuration.api_key['api-key'] = API_V3_KEY
+api_instance = sib_api_v3_sdk.EmailCampaignsApi()
 
 #function to send the image to the user
 def send_email(to_address, image_url):
@@ -70,7 +74,10 @@ if __name__ == '__main__':
 
     #process the image and other inputs with replicate
     with open(args.file_path, 'rb') as image:
-        output_url = replicate.run(replicate_url, input={"image": image})
+        output_url = replicate.run(replicate_url, 
+                                    input={"prompt": 
+                                            "A cat tackle Ronaldo in green field",
+                                            "image": image})
     if args.debug: print(output_url)
 
     #send the result via email

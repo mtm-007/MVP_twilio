@@ -1,29 +1,30 @@
 
 #python==3.11
-# replit == 3.3.2
-# uuid0 == 0.2.7
-# uuid ==1.30
-# replicate == 0.15.4
-# requests == 2.31.0
-# sib-api-v3-sdk == 7.6.0
-# flask == 2.1.2
-# flask-stripe == 0.1.0
-# pillow == 10.1.0
-# markdown == 3.5
+replit == 3.3.2
+uuid0 == 0.2.7
+uuid ==1.30
+replicate == 0.15.4
+requests == 2.31.0
+sib-api-v3-sdk == 7.6.0
+flask == 2.1.2
+flask-stripe == 0.1.0
+pillow == 10.1.0
+markdown == 3.5
+python-dotenv==1.2.1
 
 #--extra-index-url https://download.pytorch.org/whl/cpu
 
-diffusers==0.36.0 
-torch==2.8.0  
-transformers==4.57.3 
-huggingface-hub==0.36.0 
-invisible-watermark==0.2.0 
-accelerate==1.12 
-pandas==2.1.4 
-torchvision==0.23.0 
-numpy==1.26.4  
-fire==0.7.1 
-opencv-python==4.11.0.86 
-mediapipe==0.10.21   
+# diffusers==0.36.0 
+# torch==2.8.0  
+# transformers==4.57.3 
+# huggingface-hub==0.36.0 
+# invisible-watermark==0.2.0 
+# accelerate==1.12 
+# pandas==2.1.4 
+# torchvision==0.23.0 
+# numpy==1.26.4  
+# fire==0.7.1 
+# opencv-python==4.11.0.86 
+# mediapipe==0.10.21   
 
 #tokenizers==0.13.3 #let transformers handle it
