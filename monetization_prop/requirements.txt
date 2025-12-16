@@ -12,6 +12,7 @@ pillow == 10.1.0
 markdown == 3.5
 python-dotenv==1.2.1
 
+
 #--extra-index-url https://download.pytorch.org/whl/cpu
 
 # diffusers==0.36.0 

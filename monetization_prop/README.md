@@ -38,6 +38,22 @@ ocker builder prune -fd
 docker system prune -f
 docker system prune -a --volumes -f
 
+
+### Running and installation of stripe Cli 
+##### Download the latest release (replace version with latest if needed)
+curl -L https://github.com/stripe/stripe-cli/releases/download/v1.21.0/stripe_1.21.0_linux_x86_64.tar.gz -o stripe.tar.gz
+
+##### Extract the tarball
+tar -xvzf stripe.tar.gz
+
+##### Move the binary to /usr/local/bin so it's in your PATH
+sudo mv stripe /usr/local/bin/
+
+##### Verify installation
+stripe version
+##### login to verify access
+stripe login
+
 ## Running out of spaces check cached pip libs
 
 ```bash
