@@ -71,6 +71,7 @@ def send_email(subject, html, to_address=None, image_url=None):
 
 #replicate = Client(api_token=os.getenv("REPLICATE_API_TOKEN"))
 REPLICATE_API_TOKEN = os.getenv("REPLICATE_API_TOKEN")
+print(f"DEBUG: REPLICATE_API_TOKEN loaded: {REPLICATE_API_TOKEN[:10] if REPLICATE_API_TOKEN else 'NOT FOUND'}...")
 
 #the important bit 
 if __name__ == '__main__':
