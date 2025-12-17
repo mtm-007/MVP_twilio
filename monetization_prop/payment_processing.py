@@ -19,7 +19,7 @@ from flask import(
     request,
     url_for
 )
-from replit import db, web
+#from replit import db, web
 from werkzeug.utils import secure_filename
 
 #create flask app
