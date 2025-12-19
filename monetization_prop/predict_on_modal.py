@@ -15,7 +15,7 @@ image = (
     .pip_install( "torch", "diffusers", "transformers", "accelerate", "safetensors", "Xformers" )
     .env({"HF_HOME": CACHE_DIR})) #tells hf to use volume path
 
-@app.cls( image=image, gpu="A10G", timeout=600, volumes={CACHE_DIR: model_cache} )
+@app.cls( image=image, gpu="L4", timeout=600, volumes={CACHE_DIR: model_cache} )
 class DiffusionModel:
     @modal.enter()
     def setup(self)->None:
