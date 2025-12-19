@@ -14,33 +14,35 @@ def get_conn():
             timeout=15.0)            #prevents hainging of db is locked
         
         _local.conn.row_factory= sqlite3.Row
-        _local.conn.execute("PRAGMA journal_mode=WAL")  #better concurrency
+        # WAL mode allows multiple readers and one writer at the same time
+        _local.conn.execute("PRAGMA journal_mode=WAL")  #better concurrency,
         _local.conn.execute("PRAGMA foreign_keys=ON")   #enforces FKs if added later
     return _local.conn
 
 def init_db():
-    conn = get_conn()
-    #table for content/prompts
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS content (
-              file_id TEXT PRIMARY KEY,
-              email TEXT NOT NULL,
-              prompt TEXT NOT NULL,
-              status TEXT,
-              image_url TEXT
-        )
-    """)
-    #ordes table
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS orders (
-              session_id TEXT PRIMARY KEY,
-              file_id TEXT,
-              email TEXT NOT NULL,
-              processed INTEGER DEFAULT 0
-        )
-    """)
-    conn.commit()
-    conn.close()
+    with sqlite3.connect(DB_FILE) as conn:
+        #table for content/prompts
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS content (
+                file_id TEXT PRIMARY KEY,
+                email TEXT NOT NULL,
+                prompt TEXT NOT NULL,
+                status TEXT,
+                image_url TEXT
+            )
+        """)
+        #ordes table
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS orders (
+                session_id TEXT PRIMARY KEY,
+                file_id TEXT,
+                email TEXT NOT NULL,
+                processed INTEGER DEFAULT 0
+            )
+        """)
+        conn.commit()
+        # conn.close()
+    print("Database initialized successfully.")
 
 def add_content(email, prompt):
     conn = get_conn()

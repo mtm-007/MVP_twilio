@@ -10,7 +10,7 @@ from dotenv import load_dotenv
 load_dotenv()
 import stripe
 import markdown
-from fasthtml.common import fh
+import fasthtml.common as fh
 from starlette.responses import RedirectResponse
 from db import init_db, get_content, add_content, add_order, get_order, mark_order_processed, update_content_image
 
@@ -85,11 +85,7 @@ def checkout(file_id:str):
             cancel_url=DOMAIN + '/cancel',
             customer_email=file_info["email"],
             #add metadata to help track order
-            metadata={'file_id': file_id}
-
-            print(f"Creating stripe session with:")
-            print(f"  success_url: {success_url}")
-            print(f" cancel_url: {cancel_url}")
+            metadata={'file_id': file_id},
         )
         print(f"Stripe session created: {session['id']}")
         print(f"Checkout URL: {session['url']}")
@@ -124,7 +120,7 @@ def success(session_id: str = None):
 
         #the session contains metadata or we can search our orders, but first
         # lets reload the DB in case webhook already processed
-        print(f"Orders in DB: {list(db['orders'].keys())}")
+        #print(f"Orders in DB: {list(db['orders'].keys())}")
 
         #try to find the order
         order = get_order(session_id)
