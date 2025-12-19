@@ -3,7 +3,9 @@ name: Deploy to Modal
 on:
     push:
         branches: [main]
-    workflow_dispatch:
+        paths:
+          - 'one_M_checkboxes.py' #trigger only if this file changes
+    workflow_dispatch: #keeps manual trigger available anytime
 
 jobs:
     deploy:
