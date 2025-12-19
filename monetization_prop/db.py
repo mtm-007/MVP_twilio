@@ -44,15 +44,15 @@ def init_db():
         # conn.close()
     print("Database initialized successfully.")
 
-def add_content(email, prompt):
+def add_content(file_id, email, prompt):
     conn = get_conn()
-    unique_id = str(uuid4())
+    #unique_id = str(uuid4())
     conn.execute(
         "INSERT INTO content (file_id, email, prompt, status) VALUES (?, ?, ?,?)",
-        (unique_id, email, prompt, "pending")
+        (file_id, email, prompt, "pending")
     )
     conn.commit()
-    return unique_id
+    return file_id
 
 def get_content(file_id):
     conn = get_conn()

@@ -1,22 +1,15 @@
 
-import os
-import subprocess
-#import json
-import sqlite3
-import re
+import os, re, subprocess
 from uuid import uuid4
 from dotenv import load_dotenv
-
-load_dotenv()
-import stripe
-import markdown
+import stripe, markdown
 import fasthtml.common as fh
 from starlette.responses import RedirectResponse
 from db import init_db, get_content, add_content, add_order, get_order, mark_order_processed, update_content_image
 
+load_dotenv()
 
-app, rt = fh.fast_app(
-    hdrs=( fh.Script(src="https://js.stripe.com/v3/") ))
+app, rt = fh.fast_app( hdrs=( fh.Script(src="https://js.stripe.com/v3/") ), static_path='static')
 
 DOMAIN = os.environ.get("DOMAIN", "https://journalary-pamela-soundlessly.ngrok-free.dev")
 stripe.api_key = os.getenv("STRIPE_API_KEY")
@@ -27,7 +20,6 @@ DB_FILE = "sqlite_database.db"
 
 init_db()
 
-#email validation
 def is_valid_email(email):
     pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
     return re.match(pattern, email) is not None
@@ -42,7 +34,8 @@ def render_templates(template_name, **context):
         template_content = f.read()
 
     for key, value in context.items():
-        template_content = template_content.replace(f"{{{{key}}}}", str(value))
+        template_content = template_content.replace("{{" + key + "}}", str(value))
+        template_content = template_content.replace("{{ " + key + " }}", str(value))
 
     return fh.NotStr(template_content)
 
@@ -68,12 +61,7 @@ def checkout(file_id:str):
     file_info = get_content(file_id)
     if not file_info:
         return render_templates("error.html", message ="Invalid file ID", back_link="/")
-    
-    #pull out relevant info
-    #email = file_info["email"]
-
     try:
-        #create stripe checkout session
         session = stripe.checkout.Session.create(
             payment_method_types = ["card"],
             line_items = [{
@@ -99,7 +87,7 @@ def checkout(file_id:str):
         print(f"Stripe error: {e}")
         return render_templates("error.html", message="Payment system error. Please try again.", back_link="/")
 
-#the page they'll see if payment is cancelled
+
 @app.get("/cancel")
 def cancel(): return render_templates("cancel.html")
 
@@ -118,10 +106,6 @@ def success(session_id: str = None):
         if session.payment_status != 'paid':
             return render_templates("error.html", message="Payment not completed", back_link="/")
 
-        #the session contains metadata or we can search our orders, but first
-        # lets reload the DB in case webhook already processed
-        #print(f"Orders in DB: {list(db['orders'].keys())}")
-
         #try to find the order
         order = get_order(session_id)
         print(f"Found order: {order}")
@@ -139,9 +123,9 @@ def success(session_id: str = None):
         print(f"Stripe error: {e}")
         return render_templates("error.html", message = "Error retrieving payment session", back_link="/")
 
-#@app.route("/check_status/<file_id>", methods=["GET"])
+
 @app.get("/check_status/{file_id}")
-def check_status(file_id):
+def check_status(file_id: str):
     """API endpoint to check if image processing is complete"""
     content = get_content(file_id)
     if not content: return {"status": "not_found"}, 404
@@ -151,6 +135,7 @@ def check_status(file_id):
         return { "status": "complete", "image_url": content["image_url"], "prompt": content["prompt"]}
     return {"status": "processing"}
     
+
 @app.post("/webhook")
 async def stripe_webhook(request):
     payload = await request.body()
@@ -190,10 +175,11 @@ async def stripe_webhook(request):
     # Add this return for other event types
     return {'status': 'event received'}, 200
 
-def process_image(email, prompt,file_id):#filename, 
+
+def process_image(email: str, prompt: str,file_id: str):#filename, 
     #get environment variable to pass to subprocess
     env = os.environ.copy()
-    command =[ "python", "processing_image.py", "--email",email,  "--prompt",prompt,  "--file_id", file_id ]
+    command =[ "python", "processing_image.py", "--email", email,  "--prompt", prompt,  "--file_id", file_id ]
     try:
         subprocess.Popen(command, env=env)
     except Exception as e:
@@ -206,7 +192,6 @@ def readme():
             md_content = markdown.markdown(f.read(), extensions=["fenced_code"])
             return fh.NotStr(md_content)
     return fh.P("README not found")
-
 
 #run
 if __name__=="__main__":
