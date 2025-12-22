@@ -1,8 +1,11 @@
 import time
 from asyncio import Lock
 from pathlib import Path
+#from turtle import width
 from uuid import uuid4
 
+from fasthtml.core import viewport
+from fasthtml.js import NotStr
 import modal
 from modal import Image
 import fasthtml.common as fh
@@ -10,6 +13,8 @@ import httpx
 import asyncio
 import json
 import subprocess
+import pytz
+from datetime import datetime, timezone
 from redis.asyncio import Redis
 
 
@@ -33,7 +38,12 @@ CHECKBOX_CACHE_TTL = 600 #keep for 10 minutes in memory
 
 GEO_TTL_REDIS = 86400 
 CLIENT_GEO_TTL = 300.0  #client level in memory small cache (5min)
+LOCAL_TIMEZONE = pytz.timezone("America/Chicago")
 
+def utc_to_local(timestamp):
+    utc_dt = datetime.fromtimestamp(timestamp, tz=timezone.utc)
+    local_dt = utc_dt.astimezone(LOCAL_TIMEZONE)
+    return local_dt
 
 #New geolocation helper function
 async def get_geo_from_providers(ip:str, redis):
@@ -44,6 +54,7 @@ async def get_geo_from_providers(ip:str, redis):
         if r.status_code == 200:
             data = r.json()
             if data.get("success"):
+                print(f"[GEO] ✅ ipwho.is succesfully resolved {ip} -> {data.get('city')}, {data.get('country')}")
                 #normalize the data to match entry format
                 return{
                     "ip": ip,
@@ -62,6 +73,7 @@ async def get_geo_from_providers(ip:str, redis):
         if r.status_code == 200:
             data = r.json()
             if "country_name" in data:
+                print(f"[GEO] ✅ ipapi.co succesfully resolved {ip} -> {data.get('city')}, {data.get('country_name')}")
                 await redis.set(f"geo:{ip}", json.dumps(data))#, ex=86400)
                 return data
     except Exception: pass
@@ -72,24 +84,28 @@ async def get_geo_from_providers(ip:str, redis):
         if r.status_code == 200:
             data = r.json()
             if data.get("status") == "success":
+                print(f"[GEO] ✅ ip-api.com succesfully resolved {ip} -> {data.get('city')}, {data.get('country')}")
                 await redis.set(f"geo:{ip}", json.dumps(data))#, ex=86400)
                 return data
-    except Exception: pass
+    except Exception as e: 
+        print(f"[GEO] ❌ ip-api.com failed for  {ip}: {e}")
     #last resort 
     return {"ip": ip, "city": None, "country": None, "zip": None}
 
 async def get_geo(ip: str, redis):
     """Return geo info from ip using cache + fallback providers"""
-
     cached = await redis.get(f"geo:{ip}")
     if cached:
+        print(f"[GEO] 💾 Cache hit for {ip}")
         return json.loads(cached)
     #fetch from providers and cache
+    print(f"[GEO]  🔍 Cache miss for {ip}, fetching from providers...")
     data = await get_geo_from_providers(ip,redis)
     try:
         await redis.set(f"geo:{ip}", json.dumps(data)) #save get_geo api calls to providers #, ex=GEO_TTL_REDIS)
-    except Exception:
-        pass
+        print(f"[GEO] 💾 Cached geo data for {ip}")
+    except Exception as e:
+        print(f"[GEO] ⚠️  Failed to cache geo data for {ip}: {e}")
     return data
 
 
@@ -153,7 +169,7 @@ def get_real_ip(request):
 
 app_image = (
     modal.Image.debian_slim(python_version="3.12")
-    .pip_install("python-fasthtml==0.12.36", "httpx==0.27.0" ,"redis>=5.3.0")
+    .pip_install("python-fasthtml==0.12.36", "httpx==0.27.0" ,"redis>=5.3.0", "pytz")
     .apt_install("redis-server")
     .add_local_file(css_path_local,remote_path=css_path_remote)
     )
@@ -355,25 +371,48 @@ def web():
         return( 
             fh.Titled(f"One Million Checkboxes"),
             fh.Main(
-                fh.H1(f" One Million Checkboxes"),
+                fh.Div(
+                    NotStr("""
+                        <script data-name="BMC-Widget" data-cfasync="false" 
+                            src="https://cdnjs.buymeacoffee.com/1.0.0/widget.prod.min.js" 
+                            data-id="gptagent.unlock" 
+                            data-description="Support me on Buy me a coffee!" 
+                            data-message="" 
+                            data-color="#FFDD00" 
+                            data-position="top" 
+                            data-x_margin="0" 
+                            data-y_margin="0">
+                        </script>
+                    """),
+                    #style="display: flex; justify-content: center; margin-bottom: 20px;"
+                #),
+                    # fh.A(
+                    #     fh.Img(
+                    #         src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png", #or external link from github
+                    #         alt = "Buy Me A Coffee",
+                    #         style= "height: 60px !important; width: 217px !important;"
+                    #         ),
+                    #     href="https://buymeacoffee.com/gptagent.unlock/checkout",
+                    #     target="_blank"
+                    #     ),
+                    fh.H1(f" One Million Checkboxes"),
+                    style="display: flex; flex-direction: column; align-items: center; gap: 10px;" 
+                ),
                 fh.Div( 
                     fh.Span(f"{checked:,}", cls="status-checked"), " checked • ",
                     fh.Span(f"{unchecked:,}",cls="status-unchecked"), " unchecked", 
                     cls="stats", id="stats", hx_get="/stats",
                     hx_trigger="every 1s",hx_swap="outerHTML"
-                    ),
+                ),
                 fh.Div(
                     fh.NotStr(first_chunk_html), #preload first chunk
-                    cls="grid-container",
-                    id="grid-container",
-                    #critical for poll diffs
-                    hx_get=f"/diffs/{client.id}",
+                    cls="grid-container", id="grid-container",
+                    hx_get=f"/diffs/{client.id}",#critical for poll diffs
                     hx_trigger="every 500ms",hx_swap="none"
                 ),
                 fh.Div("Made with FastHTML + Redis deployed with Modal", cls="footer"), 
                 cls="container", 
-                ),
-        )
+                ))
 
     #users submitting checkbox toggles
     @app.post("/toggle/{i}/{client_id}")
@@ -393,8 +432,6 @@ def web():
             print(f"[TOGGLE] index{i}: {current} -> {new_value}")
 
             try:
-                #await redis.lset(checkboxes_key, i, json.dumps(new_value)) #old list for storing,deprecated
-                #update bitmap only
                 await redis.setbit(checkboxes_bitmap_key, i, 1 if new_value else 0)
 
                 bit_value = await redis.getbit(checkboxes_bitmap_key, i)
@@ -457,9 +494,8 @@ def web():
         return diff_array
     
     @app.get("/visitors")
-    async def visitors_page(request, offset: int = 0, limit: int = 100):
+    async def visitors_page(request, offset: int = 0, limit: int = 5):#100):
         print(f"[VISITORS] Loading visitors page (offset={offset}, limit={limit})..")
-
         #get visitors with pagination
         recent_ips = await redis.zrange("recent_visitors_sorted", offset, offset + limit - 1, desc=True)
         print(f"[VISITORS] Found {len(recent_ips)} IPs in sorted set")
@@ -472,7 +508,6 @@ def web():
                 v = json.loads(visitors_raw)
                 v["timestamp"] = float(v.get("timestamp", time.time()))
                 visitors.append(v)
-
         print(f"[VISITORS] Loaded {len(visitors)} visitor records")
 
         #Get total count from sorted set
@@ -489,7 +524,8 @@ def web():
         #Day status
         day_stats = {}
         for v in visitors:
-            day = time.strftime("%Y-%m-%d", time.localtime(v["timestamp"]))
+            local_dt = utc_to_local(v["timestamp"])
+            day = local_dt.strftime("%Y-%m-%d"), time.localtime(v["timestamp"])
             day_stats[day] = day_stats.get(day, 0) + 1
 
         sorted_days = sorted(day_stats.items(), key=lambda x:x[0], reverse=True)
@@ -497,19 +533,19 @@ def web():
         #group visitors by day for the table
         visitors_by_day = {}
         for v in visitors:
-            day = time.strftime("%Y-%m-%d", time.localtime(v["timestamp"]))
+            local_dt = utc_to_local(v["timestamp"])
+            day = local_dt.strftime("%Y-%m-%d")#, time.localtime(v["timestamp"]))
             if day not in visitors_by_day:
                 visitors_by_day[day] = []
             visitors_by_day[day].append(v)
-            #day_stats[day] = day_stats.get(day, 0) + 1
-
+    
         sorted_day_keys = sorted(visitors_by_day.keys(), reverse=True)
 
         #Create table rows grouped by day
         table_content = []
         for day_key in sorted_day_keys:
             day_visitors = visitors_by_day[day_key]
-            day_display = time.strftime("%A, %B %d, %Y", time.strptime(day_key, "%Y-%m-%d"))
+            day_display = datetime.strptime(day_key, "%Y-%m-%d").strftime("%A, %B %d, %Y")
             visitor_count = len(day_visitors)
 
             table_content.append(
@@ -522,121 +558,96 @@ def web():
             #add visitors rows for this day
             for v in day_visitors:
                 is_vpn = v.get("is_vpn", False)
-                security_badge = fh.Span("VPN", cls="badge badge-vpn") if is_vpn else fh.Span("clean", cls="badge badge-clear")
+                security_badge = fh.Span("VPN/Proxy", cls="badge badge-vpn") if is_vpn else fh.Span("clean", cls="badge badge-clear")
+                local_dt = utc_to_local(v["timestamp"])
+                local_time_str = local_dt.strftime("%H:%H:%S")
+        
                 table_content.append(
-                    fh.Tr(
-                        fh.Td(v["ip"]),
-                        fh.Td(security_badge),
-                        fh.Td(v["city"] or "-"),
-                        fh.Td(v.get("zip", "-")),
-                        fh.Td(v["country"] or "-"),
-                        fh.Td(fh.Span(f"{v.get('visit_count', 1)}", cls="visit-badge")),
-                        fh.Td(time.strftime("%H:%M:%S", time.localtime(v["timestamp"]))),
-                        cls="visitor-row" ))
-
-
+                    fh.Tr(  fh.Td(v["ip"]), fh.Td(security_badge),
+                            fh.Td(v["city"] or "-"), fh.Td(v.get("zip", "-")), fh.Td(v["country"] or "-"),
+                            fh.Td(fh.Span(f"{v.get('visit_count', 1)}", cls="visit-badge")), fh.Td(local_time_str), cls="visitor-row" ))
         #Day chart bars ( last 7 days)
         max_count_days = max([count for _,count in sorted_days], default=1) if sorted_days else 1
-        chart_bars_days = []
         now_ts = time.time()
+        now_local = utc_to_local(now_ts)
         max_count_days = 1
         last_7_days = []
         for i in range(6,-1,-1):
-            day_ts = now_ts - (i*86400)
-            day_key = time.strftime("%Y-%m-%d", time.localtime(day_ts))
+            #calculate day in local timezone
+            day_local = now_local.replace(hour=0, minute=0, second=0, microsecond=0)
+            day_local = day_local - pytz.timezone('America/Chicago').localize(datetime.fromtimestamp(i*86400)
+            .replace(tzinfo=None).replace(hour=0, minute=0, second=0, microsecond=0))
+            
+            import datetime as dt
+            target_date = now_local.date() - dt.timedelta(days=i)
+            day_key = target_date.strftime("%Y-%m-%d")
 
-            count = sum(1 for v in visitors if time.strftime("%Y-%m-%d", time.localtime(v["timestamp"])) == day_key)
+            count = sum(1 for v in visitors
+                         if utc_to_local(v["timestamp"]).strftime("%Y-%m-%d") == day_key)#, time.localtime(v["timestamp"])) == day_key)
             last_7_days.append((day_key, count))
             max_count_days = max(max_count_days, count)
 
+        chart_bars_days = []
         for date_str, count in last_7_days:
-            display_date = time.strftime("%a,%b %d", time.strptime(date_str, "%Y-%m-%d"))
+            display_date = datetime.strptime(date_str, "%Y-%m-%d").strftime("%a,%b %d")
             percentage = (count/ max_count_days) * 100
             chart_bars_days.append(
                 fh.Div(
                     fh.Div(
                         fh.Span(f"{count}", cls="bar-value") if count > 0 else "",
-                        style=f"height: {max(percentage,2)}%",  cls="bar-fill-vertical" 
-                        ),
+                        style=f"height: {max(percentage,2)}%",  cls="bar-fill-vertical" ),
                     fh.Span(display_date, cls="bar-label-vertical"), cls="bar-vertical" 
-                )
-            )
+                ) )
         
-        #pagination controls
         pagination_controls = fh.Div(
             fh.Div(
-                fh.A(
-                    "<- Previous",
-                    href=f"/visitors?offset={prev_offset}&limit={limit}", cls="pagination-btn"
-                ) if prev_offset is not None else fh.Span("<-Previous", cls="pagination-btn disabled"),
-
+                fh.A("<- Previous", href=f"/visitors?offset={prev_offset}&limit={limit}", cls="pagination-btn"
+                ) if prev_offset is not None else fh.Span("<- Previous", cls="pagination-btn disabled"),
                 fh.Span(
-                    f"Showing {offset + 1}-{min(offset + limit, total_in_db)} of {total_in_db} visitors", cls="pagination-info"
-                ),
-                fh.A(
-                    "Next ->",
-                    href=f"/visitors?offset={next_offset}&limit={limit}", cls="pagination-btn"
+                    f"Showing {offset + 1}-{min(offset + limit, total_in_db)} of {total_in_db} visitors", cls="pagination-info"),
+                fh.A("Next ->", href=f"/visitors?offset={next_offset}&limit={limit}", cls="pagination-btn"
                 ) if has_more else fh.Span("Next ->", cls="pagination-btn disabled"), cls="pagination-controls" ),
                 
             fh.Div(
                 fh.Span("show: ", style="margin-right: 10px;"),
-                fh.A("50", href=f"/visitors?offset=0&limit=50",
-                    cls="limit-btn" + (" active" if limit == 50 else "")),
-                fh.A("100", href=f"/visitors?offset=0&limit=100",
-                    cls="limit-btn" + (" active" if limit == 100 else "")),
-                fh.A("200", href=f"/visitors?offset=0&limit=200",
-                    cls="limit-btn" + (" active" if limit == 200 else "")), 
-                fh.A("500", href=f"/visitors?offset=0&limit=500",
-                    cls="limit-btn" + (" active" if limit == 500 else "")),
-                cls="limit-controls"
-            ), 
-            cls="pagination-wrapper", #style="margin-bottom: 30px;"
-        )
-
-        return fh.Main(
-            fh.H1("Recent Visitors Dashboard", cls="dashboard-title"),
-
-            #Total visitors card
-            fh.Div(
-                fh.Div("Total Unique Visitors", cls="stats-label"),
-                fh.Div(f"{total_count:,}", cls="stats-number"),
-                fh.Div(f"Database contains {total_in_db:,} Visitor Records",
-                        style="font-size: 0.9em; opacity: 0.8;"),
-                cls="stats-card"
-            ),
-            pagination_controls,
-
-            #vertical bar chart
-            fh.Div(
-                fh.H2("Visitors by Day (Last 7 days)", cls="section-title"),
+                fh.A("50", href=f"/visitors?offset=0&limit=50", cls="limit-btn" + (" active" if limit == 50 else "")),
+                fh.A("100", href=f"/visitors?offset=0&limit=100", cls="limit-btn" + (" active" if limit == 100 else "")),
+                fh.A("200", href=f"/visitors?offset=0&limit=200", cls="limit-btn" + (" active" if limit == 200 else "")), 
+                fh.A("500", href=f"/visitors?offset=0&limit=500", cls="limit-btn" + (" active" if limit == 500 else "")),
+                cls="limit-controls" ), cls="pagination-wrapper")
+        return (
+            fh.Titled("Visitors Page Records",
+            #add mobile-friendly meta tags
+            fh.Meta(name="viewport", content="width=device-width, initial-scale=1.0, maximum-scale=5.0")),
+            fh.Main( fh.H1("Recent Visitors Dashboard", cls="dashboard-title"),
+                #Total visitors card
                 fh.Div(
-                    *chart_bars_days if chart_bars_days else [
-                        fh.P("No visitors data yet", style="text-align: center; color:#999;")],
-                    cls="chart-bars-container"
-                ), 
-                cls="chart-container" 
-            ),
-
-            #visitors table with day grouping
-            fh.Div(
-                fh.H2(f"Visitors Logs (Last {limit} Visitors)", cls="section-title"),
-                fh.Table(
-                    fh.Tr( fh.Th("IP"), fh.Th("Security"), fh.Th("City"), fh.Th("Zip"), fh.Th("Country"), fh.Th("Visits"), fh.Th("Last seen"),
-                    ),
-                    *table_content,
-                    cls="table visitors-table"
-                )if table_content else fh.P("No visitors to display", 
-                                            style="text-align: center; color:#999; padding: 20px;")
-            ),
-            pagination_controls,
-
-            fh.Div(
-                fh.A("<- Back to checkboxes", href="/", cls="back-link"),
-                style="text-align: center; margin-top: 30px;"
-            ), 
-            cls="visitors-container"
-        )
-        
+                    fh.Div("Total Unique Visitors", cls="stats-label"), fh.Div(f"{total_count:,}", cls="stats-number"),
+                    fh.Div(f"Database contains {total_in_db:,} Visitor Records",
+                            style="font-size: 0.9em; opacity: 0.8;"), cls="stats-card"),
+                pagination_controls,
+                #vertical table with day grouping
+                fh.Div(
+                    fh.H2("Visitors by Day (Last 7 days - Central Time)", cls="section-title"),
+                    fh.Div(
+                        *chart_bars_days if chart_bars_days else [
+                            fh.P("No visitors data yet", style="text-align: center; color:#999;")],
+                        cls="chart-bars-container" ), cls="chart-container" ),
+                #visitors table with day grouping
+                fh.Div(
+                    fh.H2(f"Visitors Logs (Last {limit} Visitors)", cls="section-title"),
+                    fh.Div(fh.P("<- Scroll horizontal to see all columns ->",
+                        style="text-align: center; color:#999; font-size: 0.85em; margin-bottom: 10px; display: none;",cls="mobile-control-hint"),
+                    fh.Table(
+                        fh.Tr( fh.Th("IP"), fh.Th("Security"), fh.Th("City"), fh.Th("Zip"), fh.Th("Country"), fh.Th("Visits"), fh.Th("Last seen"), ),
+                        *table_content, cls="table visitors-table"
+                    )if table_content else fh.P("No visitors to display", style="text-align: center; color:#999; padding: 20px;"),
+                    style="overflow-x: auto; -webkit-overflow-scrolling: touch;")),
+                pagination_controls,
+                fh.Div(
+                    fh.A("<- Back to checkboxes", href="/", cls="back-link"),
+                    style="text-align: center; margin-top: 30px;"
+                ), cls="visitors-container" ))
     return app
 
 class Client:

@@ -184,65 +184,59 @@ h1 {
     display: inline-block;
 }
 
-.badge {
-    padding: 2px 8px;
-    border-radius: 12px;
-    font-size: 0.75rem;
-    font-weight: bold;
-    text-transform: uppercase;
+/* Chart Container */
+.chart-container {
+    background: white;
+    padding: 20px;
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    margin: 20px 0;
 }
-.badge-vpn {
-    background-color: #fed7d7;
-    color: #c53030;
-    border: 1px solid #fc8181;
-}
-.badge-clear {
-    background-color: #f0fff4;
-    color: #2f855a;
-    border: 1px solid #9ae6b4;
-    opacity: 0.7;
-}
+
+/* Vertical Bar Chart */
 .chart-bars-container {
     display: flex;
     align-items: flex-end;
     justify-content: space-around;
-    height: 200px;
-    padding-top: 20px;
-    border-bottom: 2px solid #eee;
+    height: 300px;
+    gap: 5px;
+    padding: 20px 10px;
+    border-bottom: 2px solid #ddd;
 }
 
 .bar-vertical {
     display: flex;
     flex-direction: column;
     align-items: center;
-    width: 12%;
+    justify-content: flex-end;
+    flex: 1;
+    min-width: 30px;
+    max-width: 60px;
     height: 100%;
 }
 
 .bar-fill-vertical {
     width: 100%;
-    background: linear-gradient(to top, #667eea, #764ba2);
+    background: linear-gradient(180deg, #667eea 0%, #764ba2 100%);
     border-radius: 4px 4px 0 0;
-    position: relative;
     transition: height 0.3s ease;
+    min-height: 2px;
 }
 
-.bar-value {
-    position: absolute;
-    top: -20px;
-    width: 100%;
-    text-align: center;
-    font-size: 0.7rem;
-    font-weight: bold;
-    color: #4a5568;
+.bar-vertical:hover .bar-fill-vertical {
+    background: linear-gradient(180deg, #764ba2 0%, #667eea 100%);
 }
 
 .bar-label-vertical {
-    font-size: 0.65rem;
-    margin-top: 8px;
-    color: #718096;
+    margin-top: 5px;
+    font-size: 0.75em;
+    color: #666;
+    font-weight: 600;
+    transform: rotate(-45deg);
+    transform-origin: center;
     white-space: nowrap;
 }
+
 /* Visitors Table */
 .table {
     width: 100%;
@@ -308,6 +302,17 @@ h1 {
 
 .back-link:hover {
     color: #764ba2;
+}
+
+/* Mobile scroll hint - hidden by default */
+.mobile-scroll-hint {
+    display: none !important;
+}
+
+@media (max-width: 768px) {
+    .mobile-scroll-hint {
+        display: block !important;
+    }
 }
 
 /* ============================================
@@ -396,7 +401,32 @@ h1 {
 }
 
 /* Responsive Design for Visitors Page */
+
+/* Tablet and smaller desktop */
+@media (max-width: 1024px) {
+    .visitors-container {
+        padding: 15px;
+    }
+    
+    .dashboard-title {
+        font-size: 2em;
+    }
+    
+    .section-title {
+        font-size: 1.5em;
+    }
+    
+    .chart-bars-container {
+        height: 250px;
+    }
+}
+
+/* Mobile landscape and portrait tablet */
 @media (max-width: 768px) {
+    .visitors-container {
+        padding: 10px;
+    }
+    
     .stats-number {
         font-size: 2em;
     }
@@ -407,49 +437,159 @@ h1 {
     
     .dashboard-title {
         font-size: 1.5em;
+        margin: 15px 0;
     }
     
     .section-title {
         font-size: 1.3em;
+        margin: 15px 0;
+    }
+    
+    .stats-card {
+        padding: 15px;
+    }
+    
+    .chart-container {
+        padding: 15px;
     }
     
     .chart-bars-container {
         height: 200px;
         gap: 2px;
+        padding: 15px 5px;
     }
     
     .bar-label-vertical {
         font-size: 0.65em;
     }
     
+    /* Make table scrollable horizontally on mobile */
     .table {
+        display: block;
+        overflow-x: auto;
+        white-space: nowrap;
         font-size: 0.85em;
+        -webkit-overflow-scrolling: touch; /* Smooth scrolling on iOS */
+    }
+    
+    .table thead,
+    .table tbody,
+    .table tr {
+        display: table;
+        width: 100%;
+        table-layout: fixed;
     }
     
     .table th, .table td {
-        padding: 8px;
+        padding: 8px 4px;
+        font-size: 0.85em;
     }
     
+    /* Adjust day separator for mobile */
+    .day-separator {
+        font-size: 0.95em;
+        padding: 10px 8px !important;
+    }
+    
+    /* Stack pagination controls vertically on mobile */
     .pagination-wrapper {
         padding: 15px 10px;
     }
     
     .pagination-controls {
         gap: 10px;
+        flex-direction: column;
     }
     
     .pagination-btn,
     .pagination-info {
-        padding: 6px 12px;
+        padding: 8px 16px;
         font-size: 0.9em;
+        width: 100%;
+        text-align: center;
     }
     
     .limit-controls {
         gap: 5px;
+        width: 100%;
     }
     
     .limit-btn {
-        padding: 5px 10px;
+        padding: 8px 12px;
         font-size: 0.85em;
+        flex: 1;
     }
+    
+    /* Mobile badges */
+    .visit-badge,
+    .badge {
+        font-size: 0.8em;
+        padding: 3px 8px;
+    }
+}
+
+/* Very small mobile devices */
+@media (max-width: 480px) {
+    .dashboard-title {
+        font-size: 1.3em;
+    }
+    
+    .section-title {
+        font-size: 1.1em;
+    }
+    
+    .stats-number {
+        font-size: 1.8em;
+    }
+    
+    .chart-bars-container {
+        height: 150px;
+    }
+    
+    .bar-label-vertical {
+        font-size: 0.6em;
+    }
+    
+    /* Compress table further */
+    .table th, .table td {
+        padding: 6px 3px;
+        font-size: 0.75em;
+    }
+    
+    .day-separator {
+        font-size: 0.85em;
+        padding: 8px 6px !important;
+    }
+    
+    /* Smaller pagination on very small screens */
+    .pagination-btn,
+    .pagination-info {
+        padding: 6px 10px;
+        font-size: 0.8em;
+    }
+    
+    .limit-btn {
+        padding: 6px 8px;
+        font-size: 0.75em;
+    }
+    
+    /* Hide less important columns on very small screens */
+    .table th:nth-child(3), /* Zip */
+    .table td:nth-child(3) {
+        display: none;
+    }
+}
+
+.avatar-large {
+    width: 80px;
+    height: 80px;
+    border-radius: 50%;
+    object-fit: cover;
+}
+
+.header {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    margin-bottom: 20px;
 }
