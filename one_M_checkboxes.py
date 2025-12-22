@@ -170,8 +170,7 @@ def get_real_ip(request):
 app_image = (
     modal.Image.debian_slim(python_version="3.12")
     .pip_install("python-fasthtml==0.12.36", "httpx==0.27.0" ,"redis>=5.3.0", "pytz")
-    .apt_install("redis-server")
-    .add_local_file(css_path_local,remote_path=css_path_remote)
+    .apt_install("redis-server").add_local_file(css_path_local,remote_path=css_path_remote)
     )
 
 @app.function( 
