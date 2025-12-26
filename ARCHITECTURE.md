@@ -1,192 +1,7 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>GitHub Architecture Preview</title>
-    <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
-    <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-        
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: #0d1117;
-            color: #c9d1d9;
-            line-height: 1.6;
-        }
-        
-        .github-container {
-            max-width: 1280px;
-            margin: 0 auto;
-            padding: 40px 20px;
-        }
-        
-        /* GitHub-style header */
-        .github-header {
-            background: #161b22;
-            border: 1px solid #30363d;
-            border-radius: 6px;
-            padding: 16px;
-            margin-bottom: 24px;
-        }
-        
-        .github-header h1 {
-            font-size: 32px;
-            font-weight: 600;
-            color: #c9d1d9;
-            margin-bottom: 8px;
-        }
-        
-        /* GitHub-style content blocks */
-        .content-section {
-            background: #161b22;
-            border: 1px solid #30363d;
-            border-radius: 6px;
-            padding: 24px;
-            margin-bottom: 24px;
-        }
-        
-        .content-section h2 {
-            font-size: 24px;
-            font-weight: 600;
-            color: #c9d1d9;
-            margin-bottom: 16px;
-            padding-bottom: 8px;
-            border-bottom: 1px solid #21262d;
-        }
-        
-        .content-section h3 {
-            font-size: 20px;
-            font-weight: 600;
-            color: #c9d1d9;
-            margin-top: 24px;
-            margin-bottom: 16px;
-        }
-        
-        /* Mermaid diagram container */
-        .mermaid-container {
-            background: #0d1117;
-            border: 1px solid #30363d;
-            border-radius: 6px;
-            padding: 16px;
-            margin: 16px 0;
-            overflow-x: auto;
-        }
-        
-        .mermaid {
-            display: flex;
-            justify-content: center;
-            min-height: 200px;
-        }
-        
-        /* Code blocks */
-        .code-block {
-            background: #0d1117;
-            border: 1px solid #30363d;
-            border-radius: 6px;
-            padding: 16px;
-            margin: 16px 0;
-            font-family: 'Courier New', monospace;
-            font-size: 14px;
-            overflow-x: auto;
-        }
-        
-        .code-block pre {
-            margin: 0;
-            color: #c9d1d9;
-        }
-        
-        /* GitHub breadcrumb */
-        .breadcrumb {
-            padding: 8px 0;
-            margin-bottom: 16px;
-            color: #8b949e;
-            font-size: 14px;
-        }
-        
-        .breadcrumb a {
-            color: #58a6ff;
-            text-decoration: none;
-        }
-        
-        .breadcrumb a:hover {
-            text-decoration: underline;
-        }
-        
-        /* File info bar */
-        .file-info {
-            background: #161b22;
-            border: 1px solid #30363d;
-            border-bottom: none;
-            border-radius: 6px 6px 0 0;
-            padding: 8px 16px;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            font-size: 14px;
-        }
-        
-        .file-icon {
-            color: #8b949e;
-        }
-        
-        /* Scroll hint */
-        .scroll-hint {
-            text-align: center;
-            color: #8b949e;
-            font-size: 12px;
-            margin-top: 8px;
-            font-style: italic;
-        }
-        
-        /* Loading indicator */
-        .loading {
-            text-align: center;
-            padding: 40px;
-            color: #8b949e;
-        }
-        
-        @media (max-width: 768px) {
-            .github-container {
-                padding: 20px 10px;
-            }
-            
-            .content-section {
-                padding: 16px;
-            }
-            
-            .github-header h1 {
-                font-size: 24px;
-            }
-        }
-    </style>
-</head>
-<body>
-    <div class="github-container">
-        <!-- GitHub-style breadcrumb -->
-        <div class="breadcrumb">
-            <a href="#">your-repo</a> / <strong>ARCHITECTURE.md</strong>
-        </div>
-        
-        <!-- File info bar -->
-        <div class="file-info">
-            <span class="file-icon">📄</span>
-            <span>ARCHITECTURE.md</span>
-        </div>
-        
-        <!-- Main content -->
-        <div class="github-header">
-            <h1>One Million Checkboxes - System Architecture</h1>
-        </div>
-        
-        <div class="content-section">
-            <h2>High-Level System Design</h2>
-            <div class="mermaid-container">
-                <div class="mermaid">
+# One Million Checkboxes - System Architecture
+
+## High-Level System Design
+```mermaid
 graph TD
     subgraph Client_Layer["👥 CLIENT LAYER"]
         B1[Browser 1<br/>HTMX]
@@ -220,27 +35,33 @@ graph TD
         Disk[Modal Volume<br/>/data/dump.rdb]
     end
     
+    %% Client to Application
     B1 -->|HTTP/HTMX| FastHTML
     B2 -->|HTTP/HTMX| FastHTML
     BN -->|HTTP/HTMX| FastHTML
     
+    %% Application to Components
     FastHTML --- Routes
     FastHTML --- ClientMgr
     FastHTML --- GeoAPI
     
+    %% Components to Data Layer
     Routes -->|GETBIT/SETBIT| Bitmap
     Routes -->|BITCOUNT| Bitmap
     ClientMgr -->|Diff Queue| Visitor
     GeoAPI -->|GET/SET| GeoCache
     
+    %% Geo API to External
     GeoAPI -->|Fallback 1| API1
     GeoAPI -->|Fallback 2| API2
     GeoAPI -->|Fallback 3| API3
     
+    %% Data to Storage
     Bitmap -->|Persist| Disk
     Visitor -->|Persist| Disk
     GeoCache -->|Persist| Disk
     
+    %% Styling
     classDef clientStyle fill:#667eea,stroke:#764ba2,stroke-width:2px,color:#fff
     classDef appStyle fill:#48bb78,stroke:#38a169,stroke-width:2px,color:#fff
     classDef dataStyle fill:#ed8936,stroke:#dd6b20,stroke-width:2px,color:#fff
@@ -252,15 +73,10 @@ graph TD
     class Bitmap,Visitor,GeoCache dataStyle
     class API1,API2,API3 extStyle
     class Disk storageStyle
-                </div>
-            </div>
-            <div class="scroll-hint">← Scroll horizontally if needed →</div>
-        </div>
-        
-        <div class="content-section">
-            <h2>Data Flow: Checkbox Toggle</h2>
-            <div class="mermaid-container">
-                <div class="mermaid">
+```
+
+## Data Flow: Checkbox Toggle
+```mermaid
 sequenceDiagram
     participant User
     participant Browser
@@ -284,14 +100,10 @@ sequenceDiagram
     OtherClients->>FastHTML: GET /diffs/{client_id}
     FastHTML-->>OtherClients: Return checkbox #42 update
     OtherClients->>OtherClients: Update checkbox #42
-                </div>
-            </div>
-        </div>
-        
-        <div class="content-section">
-            <h2>Data Flow: Visitor Tracking</h2>
-            <div class="mermaid-container">
-                <div class="mermaid">
+```
+
+## Data Flow: Visitor Tracking
+```mermaid
 flowchart TD
     Start([New Visitor]) --> GetIP[Extract IP Address<br/>CF-Connecting-IP]
     GetIP --> CheckCache{Check Redis<br/>geo:ip}
@@ -326,14 +138,10 @@ flowchart TD
     style End fill:#48bb78,color:#fff
     style SaveCache fill:#4299e1,color:#fff
     style Record fill:#ed8936,color:#fff
-                </div>
-            </div>
-        </div>
-        
-        <div class="content-section">
-            <h2>Technology Stack</h2>
-            <div class="mermaid-container">
-                <div class="mermaid">
+```
+
+## Technology Stack
+```mermaid
 mindmap
   root((One Million<br/>Checkboxes))
     Frontend
@@ -366,24 +174,15 @@ mindmap
         ipwho.is
         ipapi.co
         ip-api.com
-                </div>
-            </div>
-        </div>
-        
-        <div class="content-section">
-            <h2>Performance Metrics</h2>
-            <h3>Memory Usage Comparison</h3>
-            <div class="mermaid-container">
-                <div class="mermaid">
+```
+
+## Performance Metrics
+```mermaid
 pie title Memory Usage Comparison
     "Bitmap (125 KB)" : 125
     "JSON List (8 MB)" : 8000
-                </div>
-            </div>
-            
-            <h3>Request Processing Timeline</h3>
-            <div class="mermaid-container">
-                <div class="mermaid">
+```
+```mermaid
 gantt
     title Request Processing Timeline
     dateFormat X
@@ -403,41 +202,5 @@ gantt
     Geo API Call       :crit, 15, 515
     Save to Redis      :515, 540
     Record Visitor     :540, 565
-                </div>
-            </div>
-        </div>
-        
-        <div class="content-section">
-            <h2>How to Use in GitHub</h2>
-            <ol style="margin-left: 24px; color: #c9d1d9;">
-                <li style="margin: 8px 0;"><strong>Create a new file</strong> in your repo: <code style="background: #0d1117; padding: 2px 6px; border-radius: 3px;">ARCHITECTURE.md</code> or add to <code style="background: #0d1117; padding: 2px 6px; border-radius: 3px;">README.md</code></li>
-                <li style="margin: 8px 0;"><strong>Paste the Mermaid code</strong> between triple backticks with <code style="background: #0d1117; padding: 2px 6px; border-radius: 3px;">mermaid</code> language tag</li>
-                <li style="margin: 8px 0;"><strong>GitHub will automatically render</strong> the diagrams when you view the Markdown file</li>
-            </ol>
-            
-            <div class="code-block">
-                <pre>your-repo/
-├── README.md
-├── ARCHITECTURE.md  ← Add diagrams here
-└── docs/
-    └── system-design.md</pre>
-            </div>
-        </div>
-    </div>
-    
-    <script>
-        mermaid.initialize({ 
-            startOnLoad: true,
-            theme: 'dark',
-            themeVariables: {
-                primaryColor: '#667eea',
-                primaryTextColor: '#fff',
-                primaryBorderColor: '#764ba2',
-                lineColor: '#8b949e',
-                secondaryColor: '#48bb78',
-                tertiaryColor: '#ed8936'
-            }
-        });
-    </script>
-</body>
-</html>
+```
+```
