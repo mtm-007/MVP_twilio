@@ -324,6 +324,31 @@ async def handle_heartbeat(request, redis):
     
     return {"status": "ok", "duration": duration}
 
+async def handle_client_hints(request, redis):
+    client_ip = get_real_ip(request)
+    try:
+        hints = await request.json()
+        if visitor_raw := await redis.get(f"visitor:{client_ip}"):
+            visitor = json.loads(visitor_raw)
+            visitor.update({
+                "timezone":    hints.get("timezone"),
+                "language":    hints.get("language"),
+                "screen_res":  hints.get("screen"),
+                "viewport":    hints.get("viewport"),
+                "pixel_ratio": hints.get("pixel_ratio"),
+                "cpu_cores":   hints.get("cpu_cores"),
+                "ram_gb":      hints.get("ram_gb"),
+                "touch":       hints.get("touch"),
+                "connection":  hints.get("connection"),
+                "downlink":    hints.get("downlink"),
+                "save_data":   hints.get("save_data"),
+            })
+            await redis.set(f"visitor:{client_ip}", json.dumps(visitor))
+            print(f"[CLIENT-HINTS] {client_ip} | {hints.get('timezone')} | {hints.get('screen')} | {hints.get('connection')}")
+    except Exception as e:
+        print(f"[ERROR] handle_client_hints: {e}")
+    return {"status": "ok"}
+
 async def handle_session_end(request, redis):
         """End session and save final time spent"""
         client_ip = get_real_ip(request)
@@ -331,10 +356,15 @@ async def handle_session_end(request, redis):
             body = await request.json()
             duration = body.get("duration", 0)
             source = body.get("source", "main")  # ✅ read source
+            mouse_movements = body.get("mouse_movements", 0)
+            time_to_first_mouse = body.get("time_to_first_mouse")
+            likely_bot = body.get("likely_bot", False)
         except: 
             duration = 0
             source = "main"
-
+            mouse_movements = 0
+            time_to_first_mouse = None
+            likely_bot = False
         if source == "blog":# ✅ write only to 
             blog_raw = await redis.get(f"blog_visitor:{client_ip}")
             print(f"[SESSION-END] blog_visitor key exists: {blog_raw is not None}")  # ✅ add this
@@ -357,6 +387,12 @@ async def handle_session_end(request, redis):
             # existing main visitor logic unchanged
             if visitor_data := await redis.get(f"visitor:{client_ip}"):
                 visitor = json.loads(visitor_data)
+                visitor["mouse_movements"] = mouse_movements
+                visitor["time_to_first_mouse"] = time_to_first_mouse
+                visitor["likely_bot"] = likely_bot
+                await redis.set(f"visitor:{client_ip}", json.dumps(visitor))
+                if likely_bot:
+                    print(f"[BOT-SIGNAL] {client_ip} — no mouse movement after {duration:.1f}s")
                 visitor["total_time_spent"] = visitor.get("total_time_spent", 0) + duration
                 visitor["last_session_duration"] = duration
                 visitor["total_sessions"] = visitor.get("total_sessions", 0) + 1
@@ -459,7 +495,7 @@ async def render_visitors_page(request, redis, offset: int = 0, limit: int = 5, 
         day_display = datetime.strptime(day_key, "%Y-%m-%d").strftime("%A, %B %d, %Y")
         count = len(day_visitors)
 
-        table_rows.append(  f'<tr class="day-separator"><td colspan="15">'
+        table_rows.append(  f'<tr class="day-separator"><td colspan="28">'
                             f'<div style="padding:10px 0;">'
                             f'<strong>{day_display}</strong>'
                             f'<span style="color:#667eea;margin-left:10px;"> ({count} visitor{"s" if count != 1 else ""})</span>'
@@ -469,8 +505,8 @@ async def render_visitors_page(request, redis, offset: int = 0, limit: int = 5, 
             is_vpn = v.get("is_vpn", False)
             is_relay = "Relay" in v.get("classification", "")
             c = v.get("classification", "Human")
-            first_ref = v.get("first_referrer", {})
-            last_ref = v.get("last_referrer", {})
+            first_ref = v.get("first_referrer") or {}
+            last_ref = v.get("last_referrer") or {}
     
             row = ( '<tr class="visitor-row">'
                     f'<td data-label="Time">{utc_to_local(v["timestamp"]).strftime("%m/%d %H:%M")}</td>'
@@ -478,7 +514,7 @@ async def render_visitors_page(request, redis, offset: int = 0, limit: int = 5, 
                     f'<td data-label="Device">{v.get("device", "?")}</td>'
                     f'<td data-label="Security">{fasthtml_components.sec_badge(is_vpn, is_relay)}</td>'
                     f'<td data-label="Category">'
-                    f'<div><div style="font-weight:bold;color:{"#ff9500" if "Bot" in c else "#007aff"};">{c}</div>'
+                    f'<div><div style="font-weight:bold;color:{"#ff9500" if any(x in c for x in ["Bot", "Scraper", "Script"]) else "#007aff"};">{c}</div>'
                     f'<div style="font-size:0.8em;opacity:0.7;">{v.get("usage_type", "Residential")}</div></div></td>'
                     f'<td data-label="First Source">{fasthtml_components.ref_badge(first_ref.get("source", "Direct"), first_ref.get("type", "direct"))}</td>'
                     f'<td data-label="Last Source">{fasthtml_components.ref_badge(last_ref.get("source", "Direct"), last_ref.get("type", "direct"))}</td>'
@@ -492,6 +528,17 @@ async def render_visitors_page(request, redis, offset: int = 0, limit: int = 5, 
                     f'<td data-label="Actions">{v.get("total_actions", 0)}</td>'
                     f'<td data-label="Scroll %">{v.get("max_scroll_depth", 0):.0f}%</td>'
                     f'<td data-label="Last Page">{v.get("last_page", "/")[:20]}</td>'
+                    f'<td data-label="Screen">{v.get("screen_res") or "-"}</td>'
+                    f'<td data-label="Viewport">{v.get("viewport") or "-"}</td>'
+                    f'<td data-label="Timezone" style="font-size:0.8em;">{v.get("timezone") or "-"}</td>'
+                    f'<td data-label="Language">{v.get("language") or "-"}</td>'
+                    f'<td data-label="Connection">{v.get("connection") or "-"}</td>'
+                    f'<td data-label="CPU">{v.get("cpu_cores") or "-"}</td>'
+                    f'<td data-label="RAM">{str(v["ram_gb"]) + "GB" if v.get("ram_gb") else "-"}</td>'
+                    f'<td data-label="Touch">{"👆" if v.get("touch") else "🖱️"}</td>'
+                    f'<td data-label="Orientation">{v.get("orientation") or "-"}</td>'
+                    f'<td data-label="Mouse Moves">{v.get("mouse_movements", 0)}</td>'
+                    f'<td data-label="Bot Signal">{"🤖" if v.get("likely_bot") else "✅"}</td>'
                     # In your row string
                     #f'<td data-label="Referrers">{", ".join(r["source"] for r in v.get("all_referrers", [])) or "-"}</td>'
                     '</tr>' )
@@ -499,7 +546,7 @@ async def render_visitors_page(request, redis, offset: int = 0, limit: int = 5, 
 
     table_html = "".join(table_rows)
     if not table_html:
-        table_html = '<tr><td colspan="15" style="text-align:center;padding:2rem;color:#999;">No visitors</td></tr>'
+        table_html = '<tr><td colspan="28" style="text-align:center;padding:2rem;color:#999;">No visitors</td></tr>'
 
     return (
         fh.Titled("Visitors Dashboard", fh.Meta(name="viewport", content="width=device-width, initial-scale=1.0, maximum-scale=5.0")),
@@ -511,7 +558,7 @@ async def render_visitors_page(request, redis, offset: int = 0, limit: int = 5, 
                 fasthtml_components.stat_card("Bots", f"{stats['bots']:,}"),
                 fasthtml_components.stat_card("VPN Users", f"{stats['vpn_users']:,}"),
                 cls="stats-grid" ),
-            fasthtml_components.pagination(offset, limit, total_in_db, "/visitors", {"days": days}),
+            fasthtml_components.pagination(offset, limit, total_count, "/visitors", {"days": days}),
             fh.Div( fh.H2(f"Visitors by Day - Central Time", cls="section-title", style="margin:0;"),
                     fasthtml_components.range_sel(days, limit, offset, "/visitors"),
                     style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;flex-wrap:wrap;gap:15px;"
@@ -535,13 +582,16 @@ async def render_visitors_page(request, redis, offset: int = 0, limit: int = 5, 
                                 '<th>First Source</th><th>Last Source</th><th>ISP/Org</th>'
                                 '<th>City</th><th>Zip</th><th>Country</th><th>Visits</th><th>Last Seen</th>'
                                 '<th>Time Spent</th><th>Actions</th><th>Scroll %</th><th>Last Page</th>'
+                                '<th>Screen</th><th>Viewport</th><th>Timezone</th><th>Language</th>'
+                                '<th>Connection</th><th>CPU</th><th>RAM</th><th>Touch</th><th>Orientation</th>'
+                                '<th>Mouse Moves</th><th>Bot Signal</th>'
                                 '</tr></thead>'
                                 '<tbody>'
                                 f'{table_html}'
                                 '</tbody></table>' ),
                             cls="table-wrapper", style="overflow-x:auto;-webkit-overflow-scrolling:touch;" ), cls="table-wrapper"
                 ),
-                fasthtml_components.pagination(offset, limit, total_in_db, "/visitors", {"days": days}),
+                fasthtml_components.pagination(offset, limit, total_count, "/visitors", {"days": days}),
                 fasthtml_components.nav_links(("← Back to checkboxes", "/")), cls="visitors-container"))
 
 async def record_blog_visitor(ip, user_agent, geo, redis, referrer=""):
@@ -686,9 +736,7 @@ async def blog_visitors_page(redis, offset: int = 0, limit: int = 50):
                     fh.Div( fh.Div("Unique Blog Visitors", cls="stat-label"), fh.Div(str(total_unique_blog), cls="stat-number"), cls="stat-card" ),
                     fh.Div( fh.Div("Total Blog Views", cls="stat-label"), fh.Div(str(total_blog_views), cls="stat-number"), cls="stat-card" ),
                     # You can add more if you compute humans/bots/vpn among blog viewers
-                    cls="stats-grid"
-                ),
-
+                    cls="stats-grid"  ),
                 # Pagination
                 fh.Div(
                     fh.A("← Previous", href=f"/blog-visitors?offset={prev_offset}&limit={limit}", cls="btn") if prev_offset is not None else fh.Span("← Previous", cls="btn disabled"),
@@ -703,25 +751,45 @@ async def blog_visitors_page(redis, offset: int = 0, limit: int = 50):
                                 fh.Th("ISP/Org"), fh.Th("City"), fh.Th("Zip"), fh.Th("Country"),
                                 fh.Th("Visits"), fh.Th("Last Seen"), fh.Th("Total Time"),fh.Th("Last Session"),
                                 fh.Th("Total Actions"), fh.Th("Last Actions"),fh.Th("Scroll %"), fh.Th("Last Page")
-                        )
-                    ),
-                    fh.Tbody(*table_rows) if table_rows else fh.Tbody(fh.Tr(fh.Td("No blog visitors recorded yet", colspan="8", style="text-align:center;padding:2rem;")))
-                ),
-
+                        )),
+                    fh.Tbody(*table_rows) if table_rows else fh.Tbody(fh.Tr(fh.Td("No blog visitors recorded yet", colspan="8", style="text-align:center;padding:2rem;")))),
                 # Bottom pagination
                 fh.Div(
                     fh.A("← Previous", href=f"/blog-visitors?offset={prev_offset}&limit={limit}", cls="btn") if prev_offset is not None else fh.Span("← Previous", cls="btn disabled"),
                     fh.Span(f"Showing {offset + 1}-{min(offset + limit, len(ordered_ips))} of ~{total_unique_blog}"),
                     fh.A("Next →", href=f"/blog-visitors?offset={next_offset}&limit={limit}", cls="btn") if has_more else fh.Span("Next →", cls="btn disabled"),
-                    cls="pagination"
-                ), cls="container"
-            )
-        )
-    )
+                    cls="pagination" ), cls="container"
+            )))
 
 TRACKER_JS= """
     const tracker = { startTime: Date.now(), lastHeartbeat: Date.now(), scrollDepth: 0,
         init() {
+            fetch('/track-client-hints', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    timezone:    Intl.DateTimeFormat().resolvedOptions().timeZone,
+                    language:    navigator.language,
+                    screen:      `${screen.width}x${screen.height}`,
+                    viewport:    `${window.innerWidth}x${window.innerHeight}`,
+                    pixel_ratio: window.devicePixelRatio,
+                    cpu_cores:   navigator.hardwareConcurrency,
+                    ram_gb:      navigator.deviceMemory || null,
+                    touch:       navigator.maxTouchPoints > 0,
+                    connection:  navigator.connection?.effectiveType || null,
+                    downlink:    navigator.connection?.downlink || null,
+                    save_data:   navigator.connection?.saveData || false,
+                    orientation: screen.orientation?.type || (window.innerWidth > window.innerHeight ? 'landscape' : 'portrait'),
+                })
+            }).catch(() => {});
+
+            let mouseMovements = 0;
+            let firstMouseMove = null;
+            document.addEventListener('mousemove', () => {
+                mouseMovements++;
+                if (!firstMouseMove) firstMouseMove = Date.now();
+            }, { passive: true });
+
             this.sendHeartbeat(); setInterval(() => { this.sendHeartbeat(); }, 10000);
             const activityEvents = ['click', 'scroll', 'keypress', 'mousemove', 'touchstart'];
             activityEvents.forEach(event => { document.addEventListener(event, () => { this.onUserActivity(); }, { passive: true }); });
@@ -753,11 +821,12 @@ TRACKER_JS= """
 
         endSession() { const duration = (Date.now() - this.startTime) / 1000;
             console.log('[TRACKER] Ending session:', duration.toFixed(1) + 's');
-            const data = { duration: duration, scrollDepth: this.scrollDepth, timestamp: Date.now() };
+            const data = { duration: duration, scrollDepth: this.scrollDepth, timestamp: Date.now() mouse_movements: mouseMovements,
+            time_to_first_mouse: firstMouseMove ? (firstMouseMove - this.startTime) : null,
+            likely_bot: mouseMovements === 0 && duration > 5 && !('ontouchstart' in window),  // stayed 5s+ with zero mouse movement};
             if (navigator.sendBeacon) { const blob = new Blob([JSON.stringify(data)], {type: 'application/json' });
             const sent = navigator.sendBeacon('/session-end', blob); console.log('[TRACKER] sendBeacon:',sent );
             } else { fetch('/session-end', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(data), keepalive: true
-                }).catch(err => console.log('Session end failed:', err));  } } };
-    
+                }).catch(err => console.log('Session end failed:', err));  } } };   
     tracker.init(); 
     """

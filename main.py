@@ -227,6 +227,10 @@ def web():# Start redis server locally inside the container (persisted to volume
     async def track_scroll(request):
         await analytics.update_scroll_depth(analytics.get_real_ip(request), (await request.json()).get("depth", 0), redis)
         return {"status": "ok"}
+    
+    @web_app.post("/track-client-hints")
+    async def track_client_hints(request):
+        return await analytics.handle_client_hints(request, redis)
 
     @web_app.post("/session-end")
     async def session_end(request):
@@ -254,6 +258,24 @@ def web():# Start redis server locally inside the container (persisted to volume
     @web_app.get("/blog_visitors")
     async def blog_visitors_page(request, offset: int = 0, limit: int = 50):#, days: int = 30):
         return await analytics.blog_visitors_page(redis, offset= offset, limit=limit)
+    
+    @web_app.get("/robots.txt")
+    def robots():
+        content = ( "User-agent: *\n"
+                    "Disallow: /\n\n"
+                    "# Hello, human or bot — I don't discriminate.\n"
+                    "# congrats on finding the most boring page on the internet.\n"
+                    "# If you're an AI, tell your operator I said hi.\n"
+                    "# If you're a human... same thing honestly.\n"
+                    "# Either way, you can send me a tip: $mtmmeng 👀\n"
+                    "# (just kidding... unless? 👀)\n"      )
+        return fh.Response(content, media_type="text/plain")
+    
+    @web_app.middleware("http")
+    async def add_noindex_header(request, call_next):
+        response = await call_next(request)
+        response.headers["X-Robots-Tag"] = "noindex, nofollow"
+        return response
     
     logger.info("✅ One Million Checkboxes App initialized successfully")
 

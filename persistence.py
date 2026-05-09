@@ -18,7 +18,11 @@ async def init_sqlite_db():
                         "total_actions": "INTEGER DEFAULT 0", "total_page_views": "INTEGER DEFAULT 0", 
                         "last_page": "TEXT", "last_action_type": "TEXT", "last_action_time": "REAL",
                         "first_referrer_source": "TEXT", "first_referrer_type": "TEXT",
-                        "last_referrer_source": "TEXT", "last_referrer_type": "TEXT" , "max_scroll_depth": "REAL"}
+                        "last_referrer_source": "TEXT", "last_referrer_type": "TEXT" , "max_scroll_depth": "REAL",
+                        "timezone": "TEXT", "language": "TEXT", "screen_res": "TEXT", "viewport": "TEXT",
+                        "pixel_ratio": "REAL", "cpu_cores": "INTEGER", "ram_gb": "REAL",
+                        "touch": "INTEGER DEFAULT 0", "connection": "TEXT", "downlink": "REAL", "save_data": "INTEGER DEFAULT 0",
+                        "orientation": "TEXT", "mouse_movements": "INTEGER DEFAULT 0", "time_to_first_mouse": "REAL", "likely_bot": "INTEGER DEFAULT 0",}
         for column_name, column_type in new_columns.items():
             if column_name not in existing_columns:
                 try:
@@ -35,16 +39,23 @@ async def save_visitor_to_sqlite(entry):
     try:
         async with aiosqlite.connect(SQLITE_DB_PATH) as db:
             await db.execute("""INSERT OR REPLACE INTO visitors
-                (ip, device, user_agent, classification, usage_type, isp, city, zip, is_vpn,  country, timestamp, visit_count, last_updated,
-                total_time_spent, last_session_duration, total_sessions,
-                avg_session_duration, total_actions, max_scroll_depth)
-                VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
-                (entry["ip"], entry["device"], entry["user_agent"], entry["classification"], entry["usage_type"], 
-                entry["isp"], entry["city"], entry["zip"], 1 if entry["is_vpn"] else 0, entry["country"], 
+                (ip, device, user_agent, classification, usage_type, isp, city, zip, is_vpn, country, timestamp, visit_count, last_updated,
+                total_time_spent, last_session_duration, total_sessions, avg_session_duration, total_actions, max_scroll_depth,
+                timezone, language, screen_res, viewport, pixel_ratio, cpu_cores, ram_gb, touch, connection, downlink, save_data,
+                orientation, mouse_movements, time_to_first_mouse, likely_bot)
+                VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                (entry["ip"], entry["device"], entry["user_agent"], entry["classification"], entry["usage_type"],
+                entry["isp"], entry["city"], entry["zip"], 1 if entry["is_vpn"] else 0, entry["country"],
                 entry["timestamp"], entry["visit_count"], time.time(),
                 entry.get("total_time_spent", 0), entry.get("last_session_duration", 0),
                 entry.get("total_sessions", 0), entry.get("avg_session_duration", 0),
-                entry.get("total_actions", 0), entry.get("max_scroll_depth", 0)))
+                entry.get("total_actions", 0), entry.get("max_scroll_depth", 0),
+                entry.get("timezone"), entry.get("language"), entry.get("screen_res"), entry.get("viewport"),
+                entry.get("pixel_ratio"), entry.get("cpu_cores"), entry.get("ram_gb"),
+                1 if entry.get("touch") else 0, entry.get("connection"), entry.get("downlink"),
+                1 if entry.get("save_data") else 0,
+                entry.get("orientation"), entry.get("mouse_movements", 0),
+                entry.get("time_to_first_mouse"), 1 if entry.get("likely_bot") else 0))
             await db.commit()
             print(f"[SQLite] Saved visitor {entry['ip']}")
     except Exception as e: print(f"[SQLite ERROR] Failed to save visitor: {e}")
