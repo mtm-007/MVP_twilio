@@ -444,7 +444,8 @@ async def get_cached_visitors_data( redis, offset: int, limit: int, days: int ) 
 
     total_in_db = await redis.zcard("recent_visitors_sorted")
     total_count_raw = await redis.get("total_visitors_count")
-    total_count = int(total_count_raw) if total_count_raw else 0
+    #total_count = int(total_count_raw) if total_count_raw else 0
+    total_count = await redis.zcard("recent_visitors_sorted")  # actual records in db
     print(f"[VISITORS] Total: {total_count}, DB: {total_in_db}")
 
     # Group by day
@@ -559,7 +560,7 @@ async def render_visitors_page(request, redis, offset: int = 0, limit: int = 5, 
         fh.Main(
             fh.H1("Recent Visitors Dashboard", cls="dashboard-title"),
             fh.Div(
-                fasthtml_components.stat_card("Total Visitors", f"{total_count:,}"),
+                fasthtml_components.stat_card("Unique Visitors IPs Tracked", f"{total_count:,}"),
                 fasthtml_components.stat_card("Humans", f"{stats['humans']:,}"),
                 fasthtml_components.stat_card("Bots", f"{stats['bots']:,}"),
                 fasthtml_components.stat_card("VPN Users", f"{stats['vpn_users']:,}"),
