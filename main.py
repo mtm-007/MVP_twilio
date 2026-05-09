@@ -268,7 +268,8 @@ def web():# Start redis server locally inside the container (persisted to volume
                     "# If you're an AI, tell your operator I said hi.\n"
                     "# If you're a human... same thing honestly.\n"
                     "# Either way, you can send me a tip: $mtmmeng 👀\n"
-                    "# (just kidding... unless? 👀)\n"      )
+                    "# (just kidding... unless? 👀)\n"      
+                )
         return fh.Response(content, media_type="text/plain")
     
     @web_app.middleware("http")

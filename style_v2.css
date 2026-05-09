@@ -134,6 +134,7 @@ h1 {
     padding: 20px;
     background-color: #f5f5f5;
     min-height: 100vh;
+    min-width: fit-content; 
 }
 
 .dashboard-title {
@@ -401,13 +402,14 @@ h1 {
 /* BIG SCREENS: Full width, no scroll */
 @media (min-width: 1200px) {
     .table-wrapper {
-        overflow-x: visible !important;
+        overflow-x: auto !important;
         margin: 0;
     }
     
     .visitors-table {
         width: 100%;
         table-layout: auto;
+        min-width: 2400px;
     }
     
     .visitors-table th,
@@ -426,6 +428,13 @@ h1 {
     .visitors-table th:nth-child(14), .visitors-table td:nth-child(14) {  /* Scroll % */
         text-align: center;
     }
+    /* Bot signal and touch columns — fixed narrow */
+    .visitors-table th:nth-child(24), .visitors-table td:nth-child(24), /* Touch */
+    .visitors-table th:nth-child(28), .visitors-table td:nth-child(28) { /* Bot Signal */
+        min-width: 60px;
+        max-width: 80px;
+        text-align: center;
+}
 }
 
 /* MEDIUM SCREENS: Controlled scroll if needed */
@@ -459,9 +468,15 @@ h1 {
     }
     
     /* Optional: Hide less critical columns on very small screens */
-    .visitors-table th:nth-child(n+9):nth-child(-n+15),
-    .visitors-table td:nth-child(n+9):nth-child(-n+15) {
+    .visitors-table th:nth-child(n+9):nth-child(-n+28),
+    .visitors-table td:nth-child(n+9):nth-child(-n+28) {
         display: none;
+    }
+    .visitors-table th:nth-child(n+18):nth-child(-n+28),
+    .visitors-table td:nth-child(n+18):nth-child(-n+28) {
+        min-width: 80px;
+        max-width: 130px;
+        white-space: nowrap;
     }
     
     .mobile-scroll-hint {
@@ -902,7 +917,7 @@ h1 {
     }
     
     .table {
-        min-width: 1400px;
+        min-width: 2400px;
         font-size: 0.75em;
     }
     
