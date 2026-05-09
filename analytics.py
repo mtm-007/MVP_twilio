@@ -43,7 +43,13 @@ async def record_visitors(ip, user_agent, geo, redis):
                           "Bot/Server" if geo.get("is_hosting") else
                           "Human (Privacy/Relay)" if geo.get("is_relay") else "Human"))
         existing_data = json.loads(existing) if existing else {}
-        entry = {**existing_data, "ip":ip,"device":get_device_info(user_agent),"user_agent":user_agent[:120],
+        # ← preserve hint fields that come from /track-client-hints
+        hint_fields = {k: existing_data[k] for k in [
+            "timezone", "language", "screen_res", "viewport", "pixel_ratio",
+            "cpu_cores", "ram_gb", "touch", "connection", "downlink", "save_data",
+            "orientation", "mouse_movements", "time_to_first_mouse", "likely_bot"
+        ] if k in existing_data}
+        entry = {**existing_data, **hint_fields, "ip":ip,"device":get_device_info(user_agent),"user_agent":user_agent[:120],
                  "classification":classification,"usage_type":geo.get("usage_type","Unknown"),
                  "isp":geo.get("isp") or "-","city":geo.get("city") or geo.get("region","Unknown"),
                  "zip":geo.get("postal") or geo.get("zip") or "-","is_vpn":geo.get("is_vpn",False),
@@ -344,7 +350,7 @@ async def handle_client_hints(request, redis):
                 "save_data":   hints.get("save_data"),
             })
             await redis.set(f"visitor:{client_ip}", json.dumps(visitor))
-            print(f"[CLIENT-HINTS] {client_ip} | {hints.get('timezone')} | {hints.get('screen')} | {hints.get('connection')}")
+            print(f"[CLIENT-HINTS] Received from {client_ip} | {hints.get('timezone')} | {hints.get('screen')} | {hints.get('connection')}")
     except Exception as e:
         print(f"[ERROR] handle_client_hints: {e}")
     return {"status": "ok"}
@@ -764,6 +770,7 @@ async def blog_visitors_page(redis, offset: int = 0, limit: int = 50):
 TRACKER_JS= """
     const tracker = { startTime: Date.now(), lastHeartbeat: Date.now(), scrollDepth: 0,
         init() {
+            console.log('[HINTS] Sending client hints...');
             fetch('/track-client-hints', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
@@ -821,9 +828,9 @@ TRACKER_JS= """
 
         endSession() { const duration = (Date.now() - this.startTime) / 1000;
             console.log('[TRACKER] Ending session:', duration.toFixed(1) + 's');
-            const data = { duration: duration, scrollDepth: this.scrollDepth, timestamp: Date.now() mouse_movements: mouseMovements,
-            time_to_first_mouse: firstMouseMove ? (firstMouseMove - this.startTime) : null,
-            likely_bot: mouseMovements === 0 && duration > 5 && !('ontouchstart' in window),  // stayed 5s+ with zero mouse movement};
+            const data = { duration: duration, scrollDepth: this.scrollDepth, timestamp: Date.now(), mouse_movements: mouseMovements,
+                           time_to_first_mouse: firstMouseMove ? (firstMouseMove - this.startTime) : null,
+                           likely_bot: mouseMovements === 0 && duration > 5 && !('ontouchstart' in window),  }; // stayed 5s+ with zero mouse movement
             if (navigator.sendBeacon) { const blob = new Blob([JSON.stringify(data)], {type: 'application/json' });
             const sent = navigator.sendBeacon('/session-end', blob); console.log('[TRACKER] sendBeacon:',sent );
             } else { fetch('/session-end', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(data), keepalive: true

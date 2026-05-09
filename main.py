@@ -287,8 +287,7 @@ def web():# Start redis server locally inside the container (persisted to volume
 
     @asynccontextmanager
     async def lifespan(app):
-        #startup
-        await startup_migration()
+        await startup_migration() #startup
         yield
         #shutdown
         print("shuttting down...saving Redis data")
